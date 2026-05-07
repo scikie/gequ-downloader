@@ -42,8 +42,10 @@ def crawl_homepage(
     try:
         if file:
             soup = crawler.get_homepage_from_file(file)
+            url = None
         else:
             soup = asyncio.run(crawler.get_homepage())
+            url = "https://www.gequke.com/"
         
         data = crawler.extract_all(soup)
         console.print("[green]成功提取数据[/green]")
@@ -64,6 +66,48 @@ def crawl_homepage(
         console.print("\n[bold]最新搜索:[/bold]")
         for item in data.latest_searches[:5]:
             console.print(f"  - {item.keyword}")
+    
+    if not no_db:
+        from .database import Database
+        from .models import SearchKeyword, Singer, PageSnapshot, PageItem
+        
+        db = Database(config.db_path)
+        
+        snapshot = PageSnapshot(
+            page_type="homepage",
+            url=url,
+            title="歌曲客主页"
+        )
+        snapshot_id = db.insert_page_snapshot(snapshot)
+        
+        keywords = [
+            SearchKeyword(keyword=item.keyword, source="latest")
+            for item in data.latest_searches
+        ]
+        db.insert_search_keywords(keywords)
+        
+        page_items = []
+        for item in data.hot_keywords:
+            page_items.append(PageItem(
+                page_snapshot_id=snapshot_id,
+                item_type="keyword",
+                position=item.rank,
+                extra_data=json.dumps({"keyword": item.keyword, "url": item.url})
+            ))
+        
+        for item in data.hot_singers:
+            singer = Singer(name=item.name, songs_url=item.url)
+            singer_id = db.insert_singer(singer)
+            page_items.append(PageItem(
+                page_snapshot_id=snapshot_id,
+                item_type="singer",
+                item_id=singer_id,
+                position=item.rank,
+                extra_data=json.dumps({"url": item.url})
+            ))
+        
+        db.insert_page_items(page_items)
+        console.print("\n[green]已保存到数据库[/green]")
     
     if output:
         crawler.save_to_json(data, output)
