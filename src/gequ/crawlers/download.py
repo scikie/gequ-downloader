@@ -152,7 +152,7 @@ class DownloadCrawler:
         audio.save()
     
     async def download_song(self, song_id: int, embed_cover: bool = True) -> dict:
-        result = {"success": False, "mp3_path": None, "lrc_path": None, "error": None}
+        result = {"success": False, "mp3_path": None, "lrc_path": None, "error": None, "song_info": None}
         
         try:
             soup = await self.get_song_page(song_id)
@@ -172,6 +172,14 @@ class DownloadCrawler:
         
         title = song_info.get("mp3_title", "Unknown")
         author = song_info.get("mp3_author", "Unknown")
+        
+        result["song_info"] = {
+            "song_id": song_id,
+            "title": title,
+            "artist": author,
+            "cover_url": song_info.get("mp3_cover"),
+            "play_id": song_info.get("play_id"),
+        }
         
         console = None
         try:

@@ -312,6 +312,7 @@ def download_song(
     song_id: int = typer.Argument(..., help="歌曲ID"),
     output_dir: Optional[str] = typer.Option(None, "-o", "--output", help="输出目录"),
     no_cover: bool = typer.Option(False, "--no-cover", help="不嵌入封面"),
+    no_db: bool = typer.Option(False, "--no-db", help="不保存下载记录到数据库"),
 ):
     """下载单首歌曲"""
     output = output_dir or config.download_dir
@@ -333,6 +334,38 @@ def download_song(
                 console.print(f"[green]MP3: {result['mp3_path']}[/green]")
             if result["lrc_path"]:
                 console.print(f"[green]歌词: {result['lrc_path']}[/green]")
+            
+            if not no_db and result["mp3_path"]:
+                from .database import Database
+                from .models import DownloadRecord, Song
+                from pathlib import Path
+                
+                db = Database(config.db_path)
+                
+                # 先保存歌曲信息到数据库（如果不存在）
+                if result.get("song_info"):
+                    song_data = result["song_info"]
+                    song = Song(
+                        song_id=song_data["song_id"],
+                        title=song_data["title"],
+                        artist=song_data["artist"],
+                        cover_url=song_data.get("cover_url"),
+                        play_id=song_data.get("play_id"),
+                    )
+                    db.insert_song(song)
+                
+                mp3_path = Path(result["mp3_path"])
+                file_size = mp3_path.stat().st_size if mp3_path.exists() else None
+                
+                record = DownloadRecord(
+                    song_id=song_id,
+                    file_path=result["mp3_path"],
+                    file_size=file_size
+                )
+                record_id = db.insert_download_record(record)
+                
+                if record_id > 0:
+                    console.print(f"[green]已保存下载记录到数据库 (ID: {record_id})[/green]")
         else:
             console.print(f"[red]下载失败[/red]")
             if result.get("error"):
@@ -350,6 +383,7 @@ def download_song(
 def download_songs(
     song_ids: list[int] = typer.Argument(..., help="歌曲ID列表"),
     output_dir: Optional[str] = typer.Option(None, "-o", "--output", help="输出目录"),
+    no_db: bool = typer.Option(False, "--no-db", help="不保存下载记录到数据库"),
 ):
     """批量下载多首歌曲"""
     output = output_dir or config.download_dir
@@ -369,9 +403,40 @@ def download_songs(
             if result["success"]:
                 success_count += 1
                 console.print(f"[green]✓[/green] {song_id}")
+                
+                if not no_db and result["mp3_path"]:
+                    from .database import Database
+                    from .models import DownloadRecord, Song
+                    from pathlib import Path
+                    
+                    db = Database(config.db_path)
+                    
+                    # 先保存歌曲信息到数据库（如果不存在）
+                    if result.get("song_info"):
+                        song_data = result["song_info"]
+                        song = Song(
+                            song_id=song_data["song_id"],
+                            title=song_data["title"],
+                            artist=song_data["artist"],
+                            cover_url=song_data.get("cover_url"),
+                            play_id=song_data.get("play_id"),
+                        )
+                        db.insert_song(song)
+                    
+                    mp3_path = Path(result["mp3_path"])
+                    file_size = mp3_path.stat().st_size if mp3_path.exists() else None
+                    
+                    record = DownloadRecord(
+                        song_id=song_id,
+                        file_path=result["mp3_path"],
+                        file_size=file_size
+                    )
+                    db.insert_download_record(record)
             else:
                 fail_count += 1
                 console.print(f"[red]✗[/red] {song_id}")
+                if result.get("error"):
+                    console.print(f"  [dim]{result['error']}[/dim]")
         except Exception as e:
             fail_count += 1
             console.print(f"[red]✗[/red] {song_id}: {e}")
