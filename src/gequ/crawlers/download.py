@@ -105,7 +105,7 @@ class DownloadCrawler:
         
         return None
     
-    async def download_file(self, url: str, filepath: Path):
+    async def download_file(self, url: str, filepath: Path) -> str:
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             resp = await client.get(
                 url,
@@ -117,8 +117,23 @@ class DownloadCrawler:
             )
             resp.raise_for_status()
             
+            # 根据URL扩展名确定实际文件类型
+            ext = None
+            if '.aac' in url.lower():
+                ext = '.aac'
+            elif '.flac' in url.lower():
+                ext = '.flac'
+            elif '.m4a' in url.lower():
+                ext = '.m4a'
+            
+            # 如果URL中有扩展名，修改保存路径
+            if ext and filepath.suffix != ext:
+                filepath = filepath.with_suffix(ext)
+            
             with open(filepath, "wb") as f:
                 f.write(resp.content)
+            
+            return str(filepath)
     
     async def download_cover(self, cover_url: str) -> bytes:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -206,18 +221,19 @@ class DownloadCrawler:
         try:
             mp3_url = await self.get_mp3_url(song_info["play_id"], song_id)
             if not mp3_url:
-                result["error"] = "API 未返回 MP3 链接"
+                result["error"] = "API 未返回音频链接"
                 if song_info.get("mp3_extra_url"):
                     result["error"] += f"，备用链接: {song_info['mp3_extra_url']}"
                 return result
             
-            await self.download_file(mp3_url, mp3_filepath)
+            actual_path = await self.download_file(mp3_url, mp3_filepath)
             
-            if cover_data:
-                self.embed_mp3_metadata(mp3_filepath, title, author, cover_data)
+            # 只有mp3文件才嵌入封面
+            if cover_data and actual_path.endswith('.mp3'):
+                self.embed_mp3_metadata(Path(actual_path), title, author, cover_data)
             
             result["success"] = True
-            result["mp3_path"] = str(mp3_filepath)
+            result["mp3_path"] = actual_path
             
         except Exception as e:
             result["error"] = f"下载 MP3 失败: {e}"

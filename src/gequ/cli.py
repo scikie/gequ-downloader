@@ -315,6 +315,8 @@ def download_song(
     no_db: bool = typer.Option(False, "--no-db", help="不保存下载记录到数据库"),
 ):
     """下载单首歌曲"""
+    from pathlib import Path
+    
     output = output_dir or config.download_dir
     crawler = DownloadCrawler(
         output_dir=output,
@@ -331,14 +333,15 @@ def download_song(
         if result["success"]:
             console.print("[green]下载成功[/green]")
             if result["mp3_path"]:
-                console.print(f"[green]MP3: {result['mp3_path']}[/green]")
+                audio_path = Path(result["mp3_path"])
+                ext = audio_path.suffix.lstrip('.').upper()
+                console.print(f"[green]音频 ({ext}): {result['mp3_path']}[/green]")
             if result["lrc_path"]:
                 console.print(f"[green]歌词: {result['lrc_path']}[/green]")
             
             if not no_db and result["mp3_path"]:
                 from .database import Database
                 from .models import DownloadRecord, Song
-                from pathlib import Path
                 
                 db = Database(config.db_path)
                 
