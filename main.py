@@ -135,6 +135,38 @@ class GequkeDownloader:
         
         print(f"\n已保存到: {filepath}")
     
+    def download_cover(self, cover_url: str) -> bytes:
+        resp = self.session.get(cover_url)
+        resp.raise_for_status()
+        print(f"封面大小: {len(resp.content)} bytes")
+        return resp.content
+    
+    def embed_mp3_metadata(self, mp3_path: Path, title: str, author: str, cover_data: bytes):
+        from mutagen.mp3 import MP3
+        from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC, ID3NoHeaderError
+        
+        try:
+            audio = MP3(mp3_path, ID3=ID3)
+        except ID3NoHeaderError:
+            audio = MP3(mp3_path)
+            audio.add_tags()
+        
+        audio.tags.add(TIT2(encoding=3, text=title))
+        audio.tags.add(TPE1(encoding=3, text=author))
+        audio.tags.add(TALB(encoding=3, text=title))
+        
+        if cover_data:
+            audio.tags.add(APIC(
+                encoding=3,
+                mime='image/jpeg',
+                type=3,
+                desc='Cover',
+                data=cover_data
+            ))
+        
+        audio.save()
+        print(f"已嵌入封面和歌曲信息到: {mp3_path}")
+    
     def download_song(self, song_id: int):
         print(f"正在获取歌曲页面: {song_id}")
         soup = self.get_song_page(song_id)
@@ -155,11 +187,23 @@ class GequkeDownloader:
         lrc_filepath = self.output_dir / lrc_filename
         
         print(f"正在获取MP3下载链接...")
+        cover_data = None
+        if song_info.get("mp3_cover"):
+            try:
+                print(f"正在下载封面...")
+                cover_data = self.download_cover(song_info["mp3_cover"])
+            except Exception as e:
+                print(f"下载封面失败: {e}")
+        
         try:
             mp3_url = self.get_mp3_url(song_info["play_id"], song_id)
             if mp3_url:
                 print(f"正在下载MP3...")
                 self.download_file(mp3_url, mp3_filepath)
+                
+                if cover_data:
+                    print(f"正在嵌入封面和歌曲信息...")
+                    self.embed_mp3_metadata(mp3_filepath, title, author, cover_data)
             else:
                 print("无法获取MP3下载链接")
                 if song_info.get("mp3_extra_url"):
