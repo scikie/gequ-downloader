@@ -106,8 +106,15 @@ class DownloadCrawler:
         return None
     
     async def download_file(self, url: str, filepath: Path):
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers={"Referer": "https://www.gequke.com/"})
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+            resp = await client.get(
+                url,
+                headers={
+                    "Referer": "https://www.gequke.com/",
+                    "User-Agent": self.user_agent,
+                },
+                cookies=self._get_cookies()
+            )
             resp.raise_for_status()
             
             with open(filepath, "wb") as f:
@@ -145,16 +152,34 @@ class DownloadCrawler:
         audio.save()
     
     async def download_song(self, song_id: int, embed_cover: bool = True) -> dict:
-        result = {"success": False, "mp3_path": None, "lrc_path": None}
+        result = {"success": False, "mp3_path": None, "lrc_path": None, "error": None}
         
-        soup = await self.get_song_page(song_id)
+        try:
+            soup = await self.get_song_page(song_id)
+        except Exception as e:
+            result["error"] = f"获取歌曲页面失败: {e}"
+            return result
+        
         song_info = self.extract_song_info(soup)
         
+        if not song_info:
+            result["error"] = "无法提取歌曲信息"
+            return result
+        
         if not song_info.get("play_id"):
+            result["error"] = "未找到 play_id，可能需要登录"
             return result
         
         title = song_info.get("mp3_title", "Unknown")
         author = song_info.get("mp3_author", "Unknown")
+        
+        console = None
+        try:
+            from rich.console import Console
+            console = Console()
+            console.print(f"[cyan]歌曲: {title} - {author}[/cyan]")
+        except:
+            pass
         
         mp3_filename = f"{title}-{author}.mp3"
         mp3_filepath = self.output_dir / mp3_filename
@@ -166,25 +191,37 @@ class DownloadCrawler:
         if embed_cover and song_info.get("mp3_cover"):
             try:
                 cover_data = await self.download_cover(song_info["mp3_cover"])
-            except Exception:
-                pass
+            except Exception as e:
+                if console:
+                    console.print(f"[yellow]下载封面失败: {e}[/yellow]")
         
         try:
             mp3_url = await self.get_mp3_url(song_info["play_id"], song_id)
-            if mp3_url:
-                await self.download_file(mp3_url, mp3_filepath)
-                
-                if cover_data:
-                    self.embed_mp3_metadata(mp3_filepath, title, author, cover_data)
-                
-                result["success"] = True
-                result["mp3_path"] = str(mp3_filepath)
-        except Exception:
-            pass
+            if not mp3_url:
+                result["error"] = "API 未返回 MP3 链接"
+                if song_info.get("mp3_extra_url"):
+                    result["error"] += f"，备用链接: {song_info['mp3_extra_url']}"
+                return result
+            
+            await self.download_file(mp3_url, mp3_filepath)
+            
+            if cover_data:
+                self.embed_mp3_metadata(mp3_filepath, title, author, cover_data)
+            
+            result["success"] = True
+            result["mp3_path"] = str(mp3_filepath)
+            
+        except Exception as e:
+            result["error"] = f"下载 MP3 失败: {e}"
+            return result
         
         if song_info.get("lrc"):
-            with open(lrc_filepath, "w", encoding="utf-8") as f:
-                f.write(song_info["lrc"])
-            result["lrc_path"] = str(lrc_filepath)
+            try:
+                with open(lrc_filepath, "w", encoding="utf-8") as f:
+                    f.write(song_info["lrc"])
+                result["lrc_path"] = str(lrc_filepath)
+            except Exception as e:
+                if console:
+                    console.print(f"[yellow]保存歌词失败: {e}[/yellow]")
         
         return result

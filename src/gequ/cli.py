@@ -334,11 +334,15 @@ def download_song(
             if result["lrc_path"]:
                 console.print(f"[green]歌词: {result['lrc_path']}[/green]")
         else:
-            console.print("[red]下载失败[/red]")
+            console.print(f"[red]下载失败[/red]")
+            if result.get("error"):
+                console.print(f"[red]原因: {result['error']}[/red]")
             raise typer.Exit(1)
             
     except Exception as e:
         console.print(f"[red]下载失败: {e}[/red]")
+        import traceback
+        console.print(f"[red]{traceback.format_exc()}[/red]")
         raise typer.Exit(1)
 
 
