@@ -61,7 +61,7 @@ class HomepageCrawler:
         return cookies
     
     async def get_homepage(self) -> BeautifulSoup:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             resp = await client.get(
                 "https://www.gequke.com/",
                 headers=self._get_headers(),

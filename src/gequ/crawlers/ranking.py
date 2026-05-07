@@ -92,13 +92,13 @@ class RankingCrawler:
             raise ValueError(f"Invalid ranking type: {ranking_type}")
         
         if ranking_type == "singer":
-            url = f"https://www.gequke.com/singer/{page}" if page > 1 else "https://www.gequke.com/singer"
+            url = f"https://www.gequke.com/singer/{page}" if page > 1 else "https://www.gequke.com/singer/"
         else:
             url = f"https://www.gequke.com/top/{ranking_type}"
             if page > 1:
                 url = f"{url}?page={page}"
         
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             resp = await client.get(
                 url,
                 headers=self._get_headers(),

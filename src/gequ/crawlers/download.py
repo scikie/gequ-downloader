@@ -33,7 +33,7 @@ class DownloadCrawler:
     
     async def get_song_page(self, song_id: int) -> BeautifulSoup:
         url = f"https://www.gequke.com/song/{song_id}"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             resp = await client.get(
                 url,
                 headers=self._get_headers(),

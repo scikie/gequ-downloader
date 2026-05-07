@@ -122,6 +122,7 @@ def crawl_ranking(
     end_page: Optional[int] = typer.Option(None, "-e", "--end-page", help="结束页码（多页爬取）"),
     file: Optional[str] = typer.Option(None, "-f", "--file", help="从本地HTML文件读取"),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="输出JSON文件路径"),
+    no_db: bool = typer.Option(False, "--no-db", help="不保存到数据库"),
 ):
     """爬取排行榜数据"""
     if ranking_type not in RankingCrawler.RANKING_TYPES:
@@ -142,73 +143,164 @@ def crawl_ranking(
             console.print("从本地文件读取...")
             soup = crawler.get_ranking_page_from_file(file)
             data = crawler.extract_all(soup, page)
+            all_data = [data]
+            pages_processed = [page]
         elif start_page and end_page:
             all_data = []
+            pages_processed = []
             for p in range(start_page, end_page + 1):
                 console.print(f"正在爬取 {ranking_name} 第 {p} 页...")
                 soup = asyncio.run(crawler.get_ranking_page(ranking_type, p))
                 data = crawler.extract_all(soup, p)
                 all_data.append(data)
+                pages_processed.append(p)
             
             console.print(f"[green]成功爬取 {end_page - start_page + 1} 页[/green]")
             
-            if data.singers:
-                all_items = [item for d in all_data for item in d.singers]
-            else:
-                all_items = [item for d in all_data for item in d.songs]
-            
-            console.print(f"[green]共爬取 {len(all_items)} 条数据[/green]")
-            
             if output:
+                if all_data[0].singers:
+                    all_items = [item for d in all_data for item in d.singers]
+                else:
+                    all_items = [item for d in all_data for item in d.songs]
+                
                 output_path = Path(output)
-            else:
-                output_path = Path(config.download_dir) / f"{ranking_name}_page_{start_page}-{end_page}.json"
-            
-            combined_data = {
-                "ranking_name": ranking_name,
-                "start_page": start_page,
-                "end_page": end_page,
-                "total_items": len(all_items),
-                "items": [item.__dict__ for item in all_items]
-            }
-            
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(combined_data, f, ensure_ascii=False, indent=2)
-            
-            console.print(f"[green]已保存到: {output_path}[/green]")
-            return
+                combined_data = {
+                    "ranking_name": ranking_name,
+                    "start_page": start_page,
+                    "end_page": end_page,
+                    "total_items": len(all_items),
+                    "items": [item.__dict__ for item in all_items]
+                }
+                
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump(combined_data, f, ensure_ascii=False, indent=2)
+                
+                console.print(f"[green]已保存到: {output_path}[/green]")
         else:
             console.print(f"正在爬取 {ranking_name}...")
             soup = asyncio.run(crawler.get_ranking_page(ranking_type, page))
             data = crawler.extract_all(soup, page)
+            all_data = [data]
+            pages_processed = [page]
             console.print("[green]成功提取数据[/green]")
             
     except Exception as e:
         console.print(f"[red]爬取失败: {e}[/red]")
         raise typer.Exit(1)
     
-    console.print(f"\n[bold]{data.ranking_name}[/bold] - 第 {data.pagination.current_page}/{data.pagination.total_pages} 页")
-    
-    if data.singers:
-        table = Table(title=f"歌手榜 (共 {data.pagination.total_songs} 位)")
-        table.add_column("排名", style="cyan")
-        table.add_column("歌手", style="magenta")
-        for singer in data.singers[:10]:
-            table.add_row(str(singer.rank), singer.name)
-    else:
-        table = Table(title=f"歌曲榜 (共 {data.pagination.total_songs} 首)")
-        table.add_column("排名", style="cyan")
-        table.add_column("歌曲", style="green")
-        table.add_column("歌手", style="magenta")
-        for song in data.songs[:10]:
-            table.add_row(str(song.rank), song.title, song.artist)
-    
-    console.print(table)
+    if not no_db:
+        from .database import Database
+        from .models import Song, Singer, RankingItem, PageSnapshot, PageItem
+        
+        db = Database(config.db_path)
+        
+        song_count = 0
+        singer_count = 0
+        ranking_count = 0
+        
+        for idx, data in enumerate(all_data):
+            page_number = pages_processed[idx]
+            
+            snapshot = PageSnapshot(
+                page_type="ranking",
+                ranking_type=ranking_type,
+                page_number=page_number,
+                title=data.ranking_name
+            )
+            snapshot_id = db.insert_page_snapshot(snapshot)
+            
+            page_items = []
+            
+            if data.singers:
+                for singer in data.singers:
+                    s = Singer(
+                        name=singer.name,
+                        avatar_url=singer.avatar_url,
+                        songs_url=singer.songs_url
+                    )
+                    singer_id = db.insert_singer(s)
+                    singer_count += 1
+                    
+                    r = RankingItem(
+                        ranking_type=ranking_type,
+                        rank=singer.rank,
+                        item_name=singer.name,
+                        item_type="singer"
+                    )
+                    db.insert_ranking_item(r)
+                    ranking_count += 1
+                    
+                    page_items.append(PageItem(
+                        page_snapshot_id=snapshot_id,
+                        item_type="singer",
+                        item_id=singer_id,
+                        position=singer.rank,
+                        extra_data=json.dumps({
+                            "avatar_url": singer.avatar_url,
+                            "songs_url": singer.songs_url
+                        })
+                    ))
+            else:
+                for song in data.songs:
+                    s = Song(
+                        song_id=song.song_id,
+                        title=song.title,
+                        artist=song.artist,
+                        cover_url=song.cover_url
+                    )
+                    song_db_id = db.insert_song(s)
+                    song_count += 1
+                    
+                    r = RankingItem(
+                        ranking_type=ranking_type,
+                        rank=song.rank,
+                        item_id=song.song_id,
+                        item_type="song"
+                    )
+                    db.insert_ranking_item(r)
+                    ranking_count += 1
+                    
+                    page_items.append(PageItem(
+                        page_snapshot_id=snapshot_id,
+                        item_type="song",
+                        item_id=song_db_id,
+                        position=song.rank,
+                        extra_data=json.dumps({
+                            "title": song.title,
+                            "artist": song.artist,
+                            "cover_url": song.cover_url
+                        })
+                    ))
+            
+            db.insert_page_items(page_items)
+        
+        console.print(f"\n[green]已保存到数据库: {singer_count} 位歌手, {song_count} 首歌曲, {ranking_count} 条排行记录[/green]")
     
     if output:
-        crawler.save_to_json(data, output)
-        console.print(f"\n[green]已保存到: {output}[/green]")
+        if len(all_data) == 1:
+            crawler.save_to_json(all_data[0], output)
+            console.print(f"\n[green]已保存到: {output}[/green]")
+    
+    if len(all_data) == 1:
+        data = all_data[0]
+        console.print(f"\n[bold]{data.ranking_name}[/bold] - 第 {data.pagination.current_page}/{data.pagination.total_pages} 页")
+        
+        if data.singers:
+            table = Table(title=f"歌手榜 (共 {data.pagination.total_songs} 位)")
+            table.add_column("排名", style="cyan")
+            table.add_column("歌手", style="magenta")
+            for singer in data.singers[:10]:
+                table.add_row(str(singer.rank), singer.name)
+        else:
+            table = Table(title=f"歌曲榜 (共 {data.pagination.total_songs} 首)")
+            table.add_column("排名", style="cyan")
+            table.add_column("歌曲", style="green")
+            table.add_column("歌手", style="magenta")
+            for song in data.songs[:10]:
+                table.add_row(str(song.rank), song.title, song.artist)
+        
+        console.print(table)
 
 
 download_app = typer.Typer(help="下载歌曲")
