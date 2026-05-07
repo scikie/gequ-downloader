@@ -255,27 +255,27 @@ gequ download 5863335 --save-db
 # 显示统计
 gequ db stats
 
-# 保存爬取数据到数据库（手动保存）
-gequ db save homepage -f "downloads/homepage.json"
-gequ db save ranking new -f "downloads/新歌榜.json"
-
-# 清除数据
-gequ db clear rankings new            # 清除新歌榜数据
-gequ db clear keywords                 # 清除搜索关键词
-gequ db clear all                      # 清除所有数据
-
-# 导出数据
-gequ db export songs -o "songs.json"
-gequ db export singers -o "singers.json"
-gequ db export rankings new -o "new_ranking.json"
-
-# 导入数据
-gequ db import songs -f "songs.json"
-
-# 数据库维护
-gequ db backup -o "backup.db"         # 备份数据库
-gequ db restore -f "backup.db"        # 恢复数据库
-gequ db optimize                       # 优化数据库
+gequ db singer [名称]
+- 不指定名称：列出所有歌手
+- 指定名称：显示歌手详情和出现统计
+gequ db singer           # 列出所有歌手
+gequ db singer 周杰伦    # 查看周杰伦详情和统计
+gequ db song [歌曲ID]
+- 不指定ID：列出所有歌曲
+- 指定ID：显示歌曲详情和出现记录
+gequ db song           # 列出所有歌曲
+gequ db song 8         # 查看歌曲ID为8的详情
+gequ db download
+- 查看下载历史记录（包含歌曲标题、歌手、文件大小）
+gequ db download       # 显示最近20条
+gequ db download -n 50 # 显示最近50条
+gequ db ranking [榜单类型]
+- 不指定类型：列出所有排行榜数据
+- 指定类型：筛选特定榜单
+gequ db ranking           # 所有榜单
+gequ db ranking douyin    # 抖音榜
+gequ db ranking singer    # 歌手榜
+所有命令支持 -n/--number 参数控制显示数量。                       # 优化数据库
 ```
 
 **选项**：

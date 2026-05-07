@@ -235,18 +235,10 @@ class Database:
     def insert_download_record(self, record: DownloadRecord) -> int:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
-            cursor.execute("SELECT id FROM songs WHERE song_id = ?", (record.song_id,))
-            result = cursor.fetchone()
-            song_db_id = result[0] if result else None
-            
-            if not song_db_id:
-                return -1
-            
             cursor.execute("""
                 INSERT INTO downloads (song_id, file_path, file_size, downloaded_at)
                 VALUES (?, ?, ?, ?)
-            """, (song_db_id, record.file_path, record.file_size, 
+            """, (record.song_id, record.file_path, record.file_size, 
                   record.downloaded_at or "CURRENT_TIMESTAMP"))
             
             return cursor.lastrowid
@@ -337,6 +329,69 @@ class Database:
             stats['total_page_items'] = cursor.fetchone()[0]
             
             return stats
+    
+    def get_all_singers(self, limit: int = 100) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, avatar_url, songs_url, created_at
+                FROM singers
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_songs(self, limit: int = 100) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, song_id, title, artist, cover_url, created_at
+                FROM songs
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_downloads(self, limit: int = 100) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT d.id, d.song_id, d.file_path, d.file_size, d.downloaded_at,
+                       s.song_id as real_song_id, s.title, s.artist
+                FROM downloads d
+                LEFT JOIN songs s ON d.song_id = s.song_id
+                ORDER BY d.downloaded_at DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_rankings(self, ranking_type: str = None, limit: int = 100) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if ranking_type:
+                cursor.execute("""
+                    SELECT r.id, r.ranking_type, r.rank, r.crawled_at,
+                           s.song_id, s.title, s.artist,
+                           sg.name as singer_name
+                    FROM rankings r
+                    LEFT JOIN songs s ON r.song_id = s.id
+                    LEFT JOIN singers sg ON r.singer_id = sg.id
+                    WHERE r.ranking_type = ?
+                    ORDER BY r.crawled_at DESC, r.rank ASC
+                    LIMIT ?
+                """, (ranking_type, limit))
+            else:
+                cursor.execute("""
+                    SELECT r.id, r.ranking_type, r.rank, r.crawled_at,
+                           s.song_id, s.title, s.artist,
+                           sg.name as singer_name
+                    FROM rankings r
+                    LEFT JOIN songs s ON r.song_id = s.id
+                    LEFT JOIN singers sg ON r.singer_id = sg.id
+                    ORDER BY r.crawled_at DESC, r.rank ASC
+                    LIMIT ?
+                """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
     
     def insert_page_snapshot(self, snapshot: PageSnapshot) -> int:
         with self.get_connection() as conn:

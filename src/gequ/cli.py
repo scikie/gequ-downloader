@@ -474,6 +474,185 @@ def db_stats():
     console.print(table)
 
 
+@db_app.command("singer")
+def db_singer(
+    name: Optional[str] = typer.Argument(None, help="歌手名称（可选，不指定则列出所有）"),
+    limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+):
+    """查询歌手信息"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    
+    if name:
+        singer = db.get_singer_by_name(name)
+        if singer:
+            table = Table(title=f"歌手: {name}")
+            table.add_column("字段", style="cyan")
+            table.add_column("值", style="magenta")
+            table.add_row("ID", str(singer['id']))
+            table.add_row("名称", singer['name'])
+            table.add_row("头像", singer.get('avatar_url', '-') or '-')
+            table.add_row("歌曲页", singer.get('songs_url', '-') or '-')
+            table.add_row("创建时间", singer.get('created_at', '-'))
+            console.print(table)
+            
+            stats = db.get_singer_appearance_stats(name)
+            console.print(f"\n[bold]出现统计:[/bold]")
+            console.print(f"  总次数: {stats['total_count']}")
+            console.print(f"  主页: {stats['homepage_count']}")
+            console.print(f"  排行榜: {stats['ranking_count']}")
+        else:
+            console.print(f"[red]未找到歌手: {name}[/red]")
+    else:
+        singers = db.get_all_singers(limit)
+        if singers:
+            table = Table(title=f"歌手列表 (共 {len(singers)} 位)")
+            table.add_column("ID", style="cyan")
+            table.add_column("歌手", style="magenta")
+            table.add_column("创建时间", style="green")
+            for singer in singers:
+                table.add_row(str(singer['id']), singer['name'], singer.get('created_at', '-'))
+            console.print(table)
+        else:
+            console.print("[yellow]暂无歌手数据[/yellow]")
+
+
+@db_app.command("song")
+def db_song(
+    song_id: Optional[int] = typer.Argument(None, help="歌曲ID（可选，不指定则列出所有）"),
+    limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+):
+    """查询歌曲信息"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    
+    if song_id:
+        song = db.get_song_by_id(song_id)
+        if song:
+            table = Table(title=f"歌曲: {song_id}")
+            table.add_column("字段", style="cyan")
+            table.add_column("值", style="magenta")
+            table.add_row("ID", str(song['id']))
+            table.add_row("歌曲ID", str(song['song_id']))
+            table.add_row("标题", song['title'])
+            table.add_row("歌手", song['artist'])
+            table.add_row("封面", song.get('cover_url', '-') or '-')
+            table.add_row("创建时间", song.get('created_at', '-'))
+            console.print(table)
+            
+            stats = db.get_song_appearance_stats(song_id)
+            console.print(f"\n[bold]出现统计:[/bold]")
+            console.print(f"  总次数: {stats['total_count']}")
+            console.print(f"  主页: {stats['homepage_count']}")
+            console.print(f"  排行榜: {stats['ranking_count']}")
+            
+            if stats['appearances']:
+                console.print(f"\n[bold]最近出现:[/bold]")
+                for app in stats['appearances'][:5]:
+                    console.print(f"  {app['page_type']} | 排名 {app['position']} | {app['crawled_at']}")
+        else:
+            console.print(f"[red]未找到歌曲: {song_id}[/red]")
+    else:
+        songs = db.get_all_songs(limit)
+        if songs:
+            table = Table(title=f"歌曲列表 (共 {len(songs)} 首)")
+            table.add_column("歌曲ID", style="cyan")
+            table.add_column("标题", style="green")
+            table.add_column("歌手", style="magenta")
+            table.add_column("创建时间", style="yellow")
+            for song in songs:
+                table.add_row(str(song['song_id']), song['title'], song['artist'], song.get('created_at', '-'))
+            console.print(table)
+        else:
+            console.print("[yellow]暂无歌曲数据[/yellow]")
+
+
+@db_app.command("download")
+def db_download(
+    limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+):
+    """查询下载历史"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    downloads = db.get_all_downloads(limit)
+    
+    if downloads:
+        table = Table(title=f"下载历史 (共 {len(downloads)} 条)")
+        table.add_column("ID", style="cyan")
+        table.add_column("歌曲ID", style="yellow")
+        table.add_column("标题", style="green")
+        table.add_column("歌手", style="magenta")
+        table.add_column("文件大小", style="blue")
+        table.add_column("下载时间", style="dim")
+        
+        for d in downloads:
+            size_str = f"{d['file_size'] // 1024}KB" if d.get('file_size') else '-'
+            title = d.get('title', '-') or '-'
+            artist = d.get('artist', '-') or '-'
+            table.add_row(
+                str(d['id']),
+                str(d['song_id']),
+                title,
+                artist,
+                size_str,
+                d.get('downloaded_at', '-')
+            )
+        console.print(table)
+    else:
+        console.print("[yellow]暂无下载记录[/yellow]")
+
+
+@db_app.command("ranking")
+def db_ranking(
+    ranking_type: Optional[str] = typer.Argument(None, help="榜单类型（可选）"),
+    limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+):
+    """查询排行榜数据"""
+    from .database import Database
+    from .models import RANKING_TYPES
+    
+    db = Database(config.db_path)
+    
+    if ranking_type and ranking_type not in RANKING_TYPES:
+        console.print(f"[red]无效的榜单类型: {ranking_type}[/red]")
+        console.print(f"支持类型: {', '.join(RANKING_TYPES.keys())}")
+        raise typer.Exit(1)
+    
+    rankings = db.get_all_rankings(ranking_type, limit)
+    
+    if rankings:
+        title = f"{RANKING_TYPES.get(ranking_type, '排行榜')} (共 {len(rankings)} 条)" if ranking_type else f"排行榜数据 (共 {len(rankings)} 条)"
+        table = Table(title=title)
+        table.add_column("排名", style="cyan")
+        table.add_column("类型", style="yellow")
+        table.add_column("标题/歌手", style="green")
+        table.add_column("歌手", style="magenta")
+        table.add_column("抓取时间", style="dim")
+        
+        for r in rankings:
+            ranking_name = RANKING_TYPES.get(r['ranking_type'], r['ranking_type'])
+            if r.get('singer_name'):
+                item_name = r['singer_name']
+                artist = '-'
+            else:
+                item_name = r.get('title', '-') or '-'
+                artist = r.get('artist', '-') or '-'
+            
+            table.add_row(
+                str(r['rank']),
+                ranking_name,
+                item_name,
+                artist,
+                r.get('crawled_at', '-')
+            )
+        console.print(table)
+    else:
+        console.print("[yellow]暂无排行榜数据[/yellow]")
+
+
 config_app = typer.Typer(help="配置管理")
 app.add_typer(config_app, name="config")
 
