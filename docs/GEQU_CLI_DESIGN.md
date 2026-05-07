@@ -533,36 +533,48 @@ with Progress() as progress:
 
 ```
 # 现有依赖
-requests
-beautifulsoup4
-lxml
-mutagen
+httpx>=0.27.0       # 异步HTTP客户端（替代requests）
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+mutagen>=1.47.0
 
-# 新增依赖
-typer[all]        # 命令行框架
-rich              # 美化输出
-pydantic          # 配置验证
+# CLI工具依赖
+typer>=0.12.0       # 命令行框架
+rich>=13.0.0        # 美化输出
 ```
 
-## 🚀 下一步任务
+## 🚀 已实现功能
 
-### 阶段1：基础框架搭建
-- [ ] 创建 `gequ.py` 主命令文件
-- [ ] 实现 `crawl` 子命令（整合现有爬虫）
-- [ ] 实现 `download` 子命令
-- [ ] 实现 `db` 子命令基础功能
+### 阶段1：基础框架搭建 ✅
+- [x] 创建 `src/gequ/` 包结构
+- [x] 使用 httpx 实现异步爬虫模块
+- [x] 实现 `gequ crawl` 子命令（homepage, ranking）
+- [x] 实现 `gequ download` 子命令
+- [x] 实现 `gequ db stats` 子命令
+- [x] 实现 `gequ search` 命令
+- [x] 实现 `gequ config` 子命令
 
-### 阶段2：统计查询功能
-- [ ] 实现 `stats` 子命令
-- [ ] 实现 `search` 子命令
+### 阶段2：配置管理 ✅
+- [x] 实现 `gequ config` 子命令
+- [x] 创建配置文件管理模块（JSON格式）
+- [x] 配置文件位置：
+  - Windows: `%APPDATA%/gequ/config.json`
+  - Linux/Mac: `~/.config/gequ/config.json`
+
+## 🎯 下一步任务
+
+### 阶段3：统计查询功能
+- [ ] 实现 `gequ stats` 子命令完整功能
+- [ ] 支持 `gequ stats song` 和 `gequ stats singer`
 - [ ] 支持多种输出格式（table/json/csv）
 
-### 阶段3：配置管理
-- [ ] 实现 `config` 子命令
-- [ ] 创建配置文件管理模块
-- [ ] 支持环境变量配置
+### 阶段4：数据库增强功能
+- [ ] 实现 `gequ db save` 手动保存功能
+- [ ] 实现 `gequ db clear` 清除数据功能
+- [ ] 实现 `gequ db export/import` 数据导入导出
+- [ ] 实现 `gequ db backup/restore` 备份恢复功能
 
-### 阶段4：优化与完善
+### 阶段5：优化与完善
 - [ ] 添加命令补全功能
 - [ ] 添加详细的帮助文档
 - [ ] 编写单元测试
@@ -596,14 +608,14 @@ pydantic          # 配置验证
 创建一个功能完善、易于使用的命令行工具，集成以下功能：
 - ✅ 主页数据爬取
 - ✅ 排行榜数据爬取（7种榜单）
-- ✅ 关键词搜索功能 ⭐ 新增
+- ✅ 关键词搜索功能
 - ✅ 歌曲下载（MP3+歌词+封面）
 - ✅ 数据库存储（7个表）
 - ✅ 页面快照功能（支持复现和统计）
 - ✅ 统计分析（歌曲/歌手出现次数）
-- 🔄 统一命令行工具（gequ）
+- ✅ 统一命令行工具（gequ）✅ 已完成
 
 ---
 
 **最后更新**: 2026-05-07
-**状态**: 搜索功能已实现，待整合为gequ命令
+**状态**: CLI工具已实现核心功能，使用httpx异步HTTP客户端，typer命令行框架
