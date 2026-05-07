@@ -34,24 +34,23 @@ def crawl_homepage(
     crawler = HomepageCrawler(
         cookie=config.cookie,
         user_agent=config.user_agent,
-        timeout=config.timeout
+        timeout=float(config.timeout)
     )
     
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-        task = progress.add_task("正在爬取主页...")
+    console.print("正在爬取主页...")
+    
+    try:
+        if file:
+            soup = crawler.get_homepage_from_file(file)
+        else:
+            soup = asyncio.run(crawler.get_homepage())
         
-        try:
-            if file:
-                soup = crawler.get_homepage_from_file(file)
-            else:
-                soup = asyncio.run(crawler.get_homepage())
-            
-            data = crawler.extract_all(soup)
-            progress.update(task, description=f"[green]成功提取数据[/green]")
-            
-        except Exception as e:
-            progress.update(task, description=f"[red]爬取失败: {e}[/red]")
-            raise typer.Exit(1)
+        data = crawler.extract_all(soup)
+        console.print("[green]成功提取数据[/green]")
+        
+    except Exception as e:
+        console.print(f"[red]爬取失败: {e}[/red]")
+        raise typer.Exit(1)
     
     table = Table(title="主页数据统计")
     table.add_column("类型", style="cyan")
@@ -89,63 +88,61 @@ def crawl_ranking(
     crawler = RankingCrawler(
         cookie=config.cookie,
         user_agent=config.user_agent,
-        timeout=config.timeout
+        timeout=float(config.timeout)
     )
     
     ranking_name = RankingCrawler.RANKING_TYPES[ranking_type]
     
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-        task = progress.add_task(f"正在爬取 {ranking_name}...")
-        
-        try:
-            if file:
-                soup = crawler.get_ranking_page_from_file(file)
-                data = crawler.extract_all(soup, page)
-            elif start_page and end_page:
-                all_data = []
-                for p in range(start_page, end_page + 1):
-                    progress.update(task, description=f"正在爬取 {ranking_name} 第 {p} 页...")
-                    soup = asyncio.run(crawler.get_ranking_page(ranking_type, p))
-                    data = crawler.extract_all(soup, p)
-                    all_data.append(data)
-                
-                progress.update(task, description=f"[green]成功爬取 {end_page - start_page + 1} 页[/green]")
-                
-                if data.singers:
-                    all_items = [item for d in all_data for item in d.singers]
-                else:
-                    all_items = [item for d in all_data for item in d.songs]
-                
-                console.print(f"\n[green]共爬取 {len(all_items)} 条数据[/green]")
-                
-                if output:
-                    output_path = Path(output)
-                else:
-                    output_path = Path(config.download_dir) / f"{ranking_name}_page_{start_page}-{end_page}.json"
-                
-                combined_data = {
-                    "ranking_name": ranking_name,
-                    "start_page": start_page,
-                    "end_page": end_page,
-                    "total_items": len(all_items),
-                    "items": [item.__dict__ for item in all_items]
-                }
-                
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(combined_data, f, ensure_ascii=False, indent=2)
-                
-                console.print(f"[green]已保存到: {output_path}[/green]")
-                return
+    try:
+        if file:
+            console.print("从本地文件读取...")
+            soup = crawler.get_ranking_page_from_file(file)
+            data = crawler.extract_all(soup, page)
+        elif start_page and end_page:
+            all_data = []
+            for p in range(start_page, end_page + 1):
+                console.print(f"正在爬取 {ranking_name} 第 {p} 页...")
+                soup = asyncio.run(crawler.get_ranking_page(ranking_type, p))
+                data = crawler.extract_all(soup, p)
+                all_data.append(data)
+            
+            console.print(f"[green]成功爬取 {end_page - start_page + 1} 页[/green]")
+            
+            if data.singers:
+                all_items = [item for d in all_data for item in d.singers]
             else:
-                soup = asyncio.run(crawler.get_ranking_page(ranking_type, page))
-                data = crawler.extract_all(soup, page)
+                all_items = [item for d in all_data for item in d.songs]
             
-            progress.update(task, description=f"[green]成功提取数据[/green]")
+            console.print(f"[green]共爬取 {len(all_items)} 条数据[/green]")
             
-        except Exception as e:
-            progress.update(task, description=f"[red]爬取失败: {e}[/red]")
-            raise typer.Exit(1)
+            if output:
+                output_path = Path(output)
+            else:
+                output_path = Path(config.download_dir) / f"{ranking_name}_page_{start_page}-{end_page}.json"
+            
+            combined_data = {
+                "ranking_name": ranking_name,
+                "start_page": start_page,
+                "end_page": end_page,
+                "total_items": len(all_items),
+                "items": [item.__dict__ for item in all_items]
+            }
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(combined_data, f, ensure_ascii=False, indent=2)
+            
+            console.print(f"[green]已保存到: {output_path}[/green]")
+            return
+        else:
+            console.print(f"正在爬取 {ranking_name}...")
+            soup = asyncio.run(crawler.get_ranking_page(ranking_type, page))
+            data = crawler.extract_all(soup, page)
+            console.print("[green]成功提取数据[/green]")
+            
+    except Exception as e:
+        console.print(f"[red]爬取失败: {e}[/red]")
+        raise typer.Exit(1)
     
     console.print(f"\n[bold]{data.ranking_name}[/bold] - 第 {data.pagination.current_page}/{data.pagination.total_pages} 页")
     
@@ -186,28 +183,27 @@ def download_song(
         output_dir=output,
         cookie=config.cookie,
         user_agent=config.user_agent,
-        timeout=config.timeout
+        timeout=float(config.timeout)
     )
     
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-        task = progress.add_task(f"正在下载歌曲 {song_id}...")
+    console.print(f"正在下载歌曲 {song_id}...")
+    
+    try:
+        result = asyncio.run(crawler.download_song(song_id, embed_cover=not no_cover))
         
-        try:
-            result = asyncio.run(crawler.download_song(song_id, embed_cover=not no_cover))
-            
-            if result["success"]:
-                progress.update(task, description=f"[green]下载成功[/green]")
-                if result["mp3_path"]:
-                    console.print(f"[green]MP3: {result['mp3_path']}[/green]")
-                if result["lrc_path"]:
-                    console.print(f"[green]歌词: {result['lrc_path']}[/green]")
-            else:
-                progress.update(task, description=f"[red]下载失败[/red]")
-                raise typer.Exit(1)
-                
-        except Exception as e:
-            progress.update(task, description=f"[red]下载失败: {e}[/red]")
+        if result["success"]:
+            console.print("[green]下载成功[/green]")
+            if result["mp3_path"]:
+                console.print(f"[green]MP3: {result['mp3_path']}[/green]")
+            if result["lrc_path"]:
+                console.print(f"[green]歌词: {result['lrc_path']}[/green]")
+        else:
+            console.print("[red]下载失败[/red]")
             raise typer.Exit(1)
+            
+    except Exception as e:
+        console.print(f"[red]下载失败: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @download_app.command("songs")
@@ -221,7 +217,7 @@ def download_songs(
         output_dir=output,
         cookie=config.cookie,
         user_agent=config.user_agent,
-        timeout=config.timeout
+        timeout=float(config.timeout)
     )
     
     success_count = 0
@@ -329,19 +325,18 @@ def search(
     crawler = SearchCrawler(
         cookie=config.cookie,
         user_agent=config.user_agent,
-        timeout=config.timeout
+        timeout=float(config.timeout)
     )
     
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-        task = progress.add_task(f"正在搜索 '{keyword}'...")
-        
-        try:
-            soup = asyncio.run(crawler.search(keyword))
-            data = crawler.extract_all(soup)
-            progress.update(task, description=f"[green]找到 {data.total_count} 条结果[/green]")
-        except Exception as e:
-            progress.update(task, description=f"[red]搜索失败: {e}[/red]")
-            raise typer.Exit(1)
+    console.print(f"正在搜索 '{keyword}'...")
+    
+    try:
+        soup = asyncio.run(crawler.search(keyword))
+        data = crawler.extract_all(soup)
+        console.print(f"[green]找到 {data.total_count} 条结果[/green]")
+    except Exception as e:
+        console.print(f"[red]搜索失败: {e}[/red]")
+        raise typer.Exit(1)
     
     if data.songs:
         table = Table(title=f"搜索结果 (共 {len(data.songs)} 首)")

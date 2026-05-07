@@ -11,7 +11,7 @@ class GequConfig:
     download_dir: str = "downloads"
     output_format: str = "table"
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    timeout: int = 30
+    timeout: float = 30.0
     
     @classmethod
     def get_config_dir(cls) -> Path:
@@ -49,6 +49,11 @@ class GequConfig:
     
     def set(self, key: str, value: str):
         if hasattr(self, key):
+            type_hint = type(getattr(self, key))
+            if type_hint == int:
+                value = int(value)
+            elif type_hint == float:
+                value = float(value)
             setattr(self, key, value)
             self.save()
     
