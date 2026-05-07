@@ -10,13 +10,15 @@ gequke-downloader/
 ├── database.py                  # 数据库管理（7个表）
 ├── homepage_crawler.py          # 主页爬虫
 ├── ranking_crawler.py           # 排行榜爬虫
+├── search_crawler.py            # 搜索爬虫 ⭐ 新增
 ├── download_crawler.py          # 歌曲下载器
 ├── save_to_db.py                # 数据保存脚本（含统计查询）
 ├── gequke.db                    # SQLite数据库
 ├── downloads/                   # 下载目录
 │   ├── homepage.json
 │   ├── 新歌榜_page_1.json
-│   └── 热门歌手排行_page_1.json
+│   ├── 热门歌手排行_page_1.json
+│   └── 关键词-搜索结果.json      ⭐ 新增
 └── docs/
     ├── DATABASE_DESIGN.md       # 数据库设计文档
     ├── PAGE_SNAPSHOT_GUIDE.md   # 页面快照使用指南
@@ -73,6 +75,20 @@ uv run ranking_crawler.py -f "downloads/新歌榜.html" -p 1
 
 **输出**：downloads/榜单名_page_X.json
 
+#### 搜索爬取 (search_crawler.py) ⭐ 新增
+```powershell
+# 搜索歌曲
+uv run search_crawler.py "清明上"
+
+# 从本地HTML测试
+uv run search_crawler.py -f "downloads/搜索结果.html"
+
+# 指定输出目录
+uv run search_crawler.py "周杰伦" -o "downloads"
+```
+
+**输出**：downloads/关键词-搜索结果.json
+
 #### 歌曲下载 (download_crawler.py)
 ```powershell
 # 下载歌曲（通过song_id）
@@ -99,6 +115,10 @@ uv run save_to_db.py --homepage-file "downloads/homepage.html"
 uv run save_to_db.py --ranking new
 uv run save_to_db.py --ranking singer -s 1 -e 10
 uv run save_to_db.py --ranking new --ranking-file "downloads/新歌榜.html"
+
+# 保存搜索数据 ⭐ 新增
+uv run save_to_db.py --search "清明上"
+uv run save_to_db.py --search-file "downloads/搜索结果.html"
 
 # 指定数据库路径
 uv run save_to_db.py --stats -d "data/gequke.db"
@@ -573,9 +593,17 @@ pydantic          # 配置验证
 
 ## 🎯 项目目标
 
-创建一个功能完善、易于使用的命令行工具，集成爬取、下载、数据库管理、统计分析等所有功能，提供友好的用户体验。
+创建一个功能完善、易于使用的命令行工具，集成以下功能：
+- ✅ 主页数据爬取
+- ✅ 排行榜数据爬取（7种榜单）
+- ✅ 关键词搜索功能 ⭐ 新增
+- ✅ 歌曲下载（MP3+歌词+封面）
+- ✅ 数据库存储（7个表）
+- ✅ 页面快照功能（支持复现和统计）
+- ✅ 统计分析（歌曲/歌手出现次数）
+- 🔄 统一命令行工具（gequ）
 
 ---
 
 **最后更新**: 2026-05-07
-**状态**: 设计完成，待实现
+**状态**: 搜索功能已实现，待整合为gequ命令

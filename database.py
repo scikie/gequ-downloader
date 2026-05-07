@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 from contextlib import contextmanager
 
-from models import Singer, Song, RankingItem, SearchKeyword, DownloadRecord, PageSnapshot, PageItem, RANKING_TYPES, SEARCH_SOURCES
+from models import Singer, Song, RankingItem, SearchKeyword, DownloadRecord, PageSnapshot, PageItem, SearchRecord, RANKING_TYPES, SEARCH_SOURCES
 
 
 class Database:
@@ -108,11 +108,12 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     page_type TEXT NOT NULL,
                     ranking_type TEXT,
+                    search_keyword TEXT,
                     page_number INTEGER DEFAULT 1,
                     url TEXT,
                     title TEXT,
                     crawled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(page_type, ranking_type, page_number, crawled_at)
+                    UNIQUE(page_type, ranking_type, search_keyword, page_number, crawled_at)
                 )
             """)
             
@@ -341,10 +342,10 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO page_snapshots (page_type, ranking_type, page_number, url, title)
-                VALUES (?, ?, ?, ?, ?)
-            """, (snapshot.page_type, snapshot.ranking_type, snapshot.page_number, 
-                  snapshot.url, snapshot.title))
+                INSERT INTO page_snapshots (page_type, ranking_type, search_keyword, page_number, url, title)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (snapshot.page_type, snapshot.ranking_type, snapshot.search_keyword, 
+                  snapshot.page_number, snapshot.url, snapshot.title))
             return cursor.lastrowid
     
     def insert_page_item(self, item: PageItem) -> int:
@@ -560,6 +561,8 @@ def main():
         print(f"  排行记录数: {stats['total_rankings']}")
         print(f"  搜索关键词数: {stats['total_keywords']}")
         print(f"  下载记录数: {stats['total_downloads']}")
+        print(f"  页面快照数: {stats['total_page_snapshots']}")
+        print(f"  页面条目数: {stats['total_page_items']}")
     
     if args.clear_rankings:
         db.clear_rankings(args.clear_rankings)

@@ -57,8 +57,9 @@ class DownloadRecord:
 @dataclass
 class PageSnapshot:
     """页面快照"""
-    page_type: str  # homepage / ranking
+    page_type: str  # homepage / ranking / search
     ranking_type: Optional[str] = None  # 如果是排行榜页，指定榜单类型
+    search_keyword: Optional[str] = None  # 如果是搜索页，指定搜索关键词
     page_number: int = 1
     url: Optional[str] = None
     title: Optional[str] = None
@@ -74,6 +75,13 @@ class PageItem:
     extra_data: Optional[str] = None  # JSON格式的额外数据
 
 
+@dataclass
+class SearchRecord:
+    """搜索记录"""
+    keyword: str
+    total_count: int = 0
+
+
 RANKING_TYPES = {
     "singer": "歌手榜",
     "surge": "飙升榜",
@@ -87,4 +95,10 @@ RANKING_TYPES = {
 SEARCH_SOURCES = {
     "latest": "最新搜索",
     "hot": "大家都在搜",
+}
+
+PAGE_TYPES = {
+    "homepage": "主页",
+    "ranking": "排行榜",
+    "search": "搜索结果",
 }
