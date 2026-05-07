@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 from contextlib import contextmanager
 
-from models import Singer, Song, RankingItem, SearchKeyword, DownloadRecord, RANKING_TYPES, SEARCH_SOURCES
+from models import Singer, Song, RankingItem, SearchKeyword, DownloadRecord, PageSnapshot, PageItem, RANKING_TYPES, SEARCH_SOURCES
 
 
 class Database:
@@ -102,6 +102,36 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_rankings_rank ON rankings(ranking_type, rank)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_singers_name ON singers(name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_keywords_keyword ON search_keywords(keyword)")
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS page_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    page_type TEXT NOT NULL,
+                    ranking_type TEXT,
+                    page_number INTEGER DEFAULT 1,
+                    url TEXT,
+                    title TEXT,
+                    crawled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(page_type, ranking_type, page_number, crawled_at)
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS page_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    page_snapshot_id INTEGER NOT NULL,
+                    item_type TEXT NOT NULL,
+                    item_id INTEGER,
+                    position INTEGER DEFAULT 0,
+                    extra_data TEXT,
+                    FOREIGN KEY (page_snapshot_id) REFERENCES page_snapshots(id)
+                )
+            """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_snapshots_type ON page_snapshots(page_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_snapshots_date ON page_snapshots(crawled_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_items_snapshot ON page_items(page_snapshot_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_items_item ON page_items(item_type, item_id)")
     
     def insert_singer(self, singer: Singer) -> int:
         with self.get_connection() as conn:
@@ -299,7 +329,201 @@ class Database:
             cursor.execute("SELECT COUNT(*) FROM downloads")
             stats['total_downloads'] = cursor.fetchone()[0]
             
+            cursor.execute("SELECT COUNT(*) FROM page_snapshots")
+            stats['total_page_snapshots'] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM page_items")
+            stats['total_page_items'] = cursor.fetchone()[0]
+            
             return stats
+    
+    def insert_page_snapshot(self, snapshot: PageSnapshot) -> int:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO page_snapshots (page_type, ranking_type, page_number, url, title)
+                VALUES (?, ?, ?, ?, ?)
+            """, (snapshot.page_type, snapshot.ranking_type, snapshot.page_number, 
+                  snapshot.url, snapshot.title))
+            return cursor.lastrowid
+    
+    def insert_page_item(self, item: PageItem) -> int:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO page_items (page_snapshot_id, item_type, item_id, position, extra_data)
+                VALUES (?, ?, ?, ?, ?)
+            """, (item.page_snapshot_id, item.item_type, item.item_id, 
+                  item.position, item.extra_data))
+            return cursor.lastrowid
+    
+    def insert_page_items(self, items: List[PageItem]) -> int:
+        count = 0
+        for item in items:
+            self.insert_page_item(item)
+            count += 1
+        return count
+    
+    def get_page_snapshots(self, page_type: str = None, limit: int = 100) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if page_type:
+                cursor.execute("""
+                    SELECT * FROM page_snapshots 
+                    WHERE page_type = ?
+                    ORDER BY crawled_at DESC
+                    LIMIT ?
+                """, (page_type, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM page_snapshots 
+                    ORDER BY crawled_at DESC
+                    LIMIT ?
+                """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_page_items_by_snapshot(self, snapshot_id: int) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT pi.*, s.title, s.artist, s.song_id, sg.name as singer_name
+                FROM page_items pi
+                LEFT JOIN songs s ON pi.item_type = 'song' AND pi.item_id = s.id
+                LEFT JOIN singers sg ON pi.item_type = 'singer' AND pi.item_id = sg.id
+                WHERE pi.page_snapshot_id = ?
+                ORDER BY pi.position ASC
+            """, (snapshot_id,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_song_appearance_stats(self, song_id: int) -> dict:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats = {
+                'song_id': song_id,
+                'homepage_count': 0,
+                'ranking_count': 0,
+                'total_count': 0,
+                'appearances': []
+            }
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items 
+                WHERE item_type = 'song' AND item_id = (
+                    SELECT id FROM songs WHERE song_id = ?
+                )
+            """, (song_id,))
+            stats['total_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'song' AND pi.item_id = (
+                    SELECT id FROM songs WHERE song_id = ?
+                ) AND ps.page_type = 'homepage'
+            """, (song_id,))
+            stats['homepage_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'song' AND pi.item_id = (
+                    SELECT id FROM songs WHERE song_id = ?
+                ) AND ps.page_type = 'ranking'
+            """, (song_id,))
+            stats['ranking_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT ps.*, pi.position
+                FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'song' AND pi.item_id = (
+                    SELECT id FROM songs WHERE song_id = ?
+                )
+                ORDER BY ps.crawled_at DESC
+                LIMIT 20
+            """, (song_id,))
+            stats['appearances'] = [dict(row) for row in cursor.fetchall()]
+            
+            return stats
+    
+    def get_singer_appearance_stats(self, singer_name: str) -> dict:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats = {
+                'singer_name': singer_name,
+                'homepage_count': 0,
+                'ranking_count': 0,
+                'total_count': 0,
+                'appearances': []
+            }
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items 
+                WHERE item_type = 'singer' AND item_id = (
+                    SELECT id FROM singers WHERE name = ?
+                )
+            """, (singer_name,))
+            stats['total_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'singer' AND pi.item_id = (
+                    SELECT id FROM singers WHERE name = ?
+                ) AND ps.page_type = 'homepage'
+            """, (singer_name,))
+            stats['homepage_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'singer' AND pi.item_id = (
+                    SELECT id FROM singers WHERE name = ?
+                ) AND ps.page_type = 'ranking'
+            """, (singer_name,))
+            stats['ranking_count'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT ps.*, pi.position
+                FROM page_items pi
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+                WHERE pi.item_type = 'singer' AND pi.item_id = (
+                    SELECT id FROM singers WHERE name = ?
+                )
+                ORDER BY ps.crawled_at DESC
+                LIMIT 20
+            """, (singer_name,))
+            stats['appearances'] = [dict(row) for row in cursor.fetchall()]
+            
+            return stats
+    
+    def get_top_appearing_songs(self, limit: int = 10) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.song_id, s.title, s.artist, COUNT(*) as appearance_count
+                FROM page_items pi
+                JOIN songs s ON pi.item_type = 'song' AND pi.item_id = s.id
+                GROUP BY s.song_id
+                ORDER BY appearance_count DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_top_appearing_singers(self, limit: int = 10) -> List[dict]:
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT sg.name, COUNT(*) as appearance_count
+                FROM page_items pi
+                JOIN singers sg ON pi.item_type = 'singer' AND pi.item_id = sg.id
+                GROUP BY sg.name
+                ORDER BY appearance_count DESC
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
     
     def clear_rankings(self, ranking_type: str = None):
         with self.get_connection() as conn:

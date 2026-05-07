@@ -54,6 +54,26 @@ class DownloadRecord:
     downloaded_at: Optional[str] = None
 
 
+@dataclass
+class PageSnapshot:
+    """页面快照"""
+    page_type: str  # homepage / ranking
+    ranking_type: Optional[str] = None  # 如果是排行榜页，指定榜单类型
+    page_number: int = 1
+    url: Optional[str] = None
+    title: Optional[str] = None
+
+
+@dataclass
+class PageItem:
+    """页面条目"""
+    page_snapshot_id: int
+    item_type: str  # song / singer / keyword
+    item_id: Optional[int] = None  # 关联singers.id或songs.id
+    position: int = 0  # 在页面中的位置/排名
+    extra_data: Optional[str] = None  # JSON格式的额外数据
+
+
 RANKING_TYPES = {
     "singer": "歌手榜",
     "surge": "飙升榜",
