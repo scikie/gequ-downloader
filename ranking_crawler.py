@@ -1,10 +1,6 @@
 """
-已完成！创建了 ranking_crawler.py，支持爬取排行榜页面：
-数据结构：
-- SongRank - 歌曲排行（排名、标题、歌手、ID、封面URL、歌曲URL）
-- Pagination - 分页信息（当前页、总页数、总歌曲数、上下页URL等）
-- RankingPageData - 榜单页面数据汇总
-支持的榜单类型：
+支持的榜单类型（已更新）：
+- singer - 歌手榜 ⭐ 新增
 - surge - 飙升榜
 - new - 新歌榜
 - douyin - 抖音榜
@@ -12,15 +8,12 @@
 - dianyin - 电音榜
 - wwdj - DJ榜
 使用示例：
-# 爬取新歌榜第1页
-uv run ranking_crawler.py new -p 1
-# 爬取新歌榜第2-5页
-uv run ranking_crawler.py new -s 2 -e 5
-# 从本地HTML测试
-uv run ranking_crawler.py -f "downloads/新歌榜.html" -p 1
-# 爬取所有榜单
-uv run ranking_crawler.py new -s 1 -e 10
-已成功提取并保存到 downloads/新歌榜_page_1.json
+# 爬取歌手榜第1页
+uv run ranking_crawler.py singer -p 1
+# 爬取歌手榜第1-10页
+uv run ranking_crawler.py singer -s 1 -e 10
+# 爬取所有歌手（100页，1000位歌手）
+uv run ranking_crawler.py singer -s 1 -e 100
 """
 
 import json
@@ -44,6 +37,14 @@ class SongRank:
 
 
 @dataclass
+class SingerRank:
+    rank: int
+    name: str
+    avatar_url: str
+    songs_url: str
+
+
+@dataclass
 class Pagination:
     current_page: int
     total_pages: int
@@ -59,12 +60,20 @@ class Pagination:
 @dataclass
 class RankingPageData:
     ranking_name: str
-    songs: list[SongRank]
-    pagination: Pagination
+    songs: list[SongRank] = None
+    singers: list[SingerRank] = None
+    pagination: Pagination = None
+    
+    def __post_init__(self):
+        if self.songs is None:
+            self.songs = []
+        if self.singers is None:
+            self.singers = []
 
 
 class RankingCrawler:
     RANKING_TYPES = {
+        "singer": "歌手榜",
         "surge": "飙升榜",
         "new": "新歌榜",
         "douyin": "抖音榜",
@@ -99,9 +108,15 @@ class RankingCrawler:
         if ranking_type not in self.RANKING_TYPES:
             raise ValueError(f"Invalid ranking type: {ranking_type}. Valid types: {list(self.RANKING_TYPES.keys())}")
         
-        url = f"https://www.gequke.com/top/{ranking_type}"
-        if page > 1:
-            url = f"{url}?page={page}"
+        if ranking_type == "singer":
+            if page == 1:
+                url = "https://www.gequke.com/singer"
+            else:
+                url = f"https://www.gequke.com/singer/{page}"
+        else:
+            url = f"https://www.gequke.com/top/{ranking_type}"
+            if page > 1:
+                url = f"{url}?page={page}"
         
         resp = self.session.get(url)
         resp.raise_for_status()
@@ -169,6 +184,44 @@ class RankingCrawler:
         
         return songs
     
+    def extract_singers(self, soup: BeautifulSoup) -> list[SingerRank]:
+        singers = []
+        table = soup.find("table", {"id": "myTable"})
+        
+        if not table:
+            return singers
+        
+        tbody = table.find("tbody")
+        if not tbody:
+            return singers
+        
+        rows = tbody.find_all("tr")
+        
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 4:
+                continue
+            
+            rank_text = cols[0].get_text(strip=True)
+            rank = int(rank_text) if rank_text.isdigit() else 0
+            
+            avatar_link = cols[1].find("a")
+            img = cols[1].find("img")
+            
+            avatar_url = img.get("src", "") if img else ""
+            songs_url = avatar_link.get("href", "") if avatar_link else ""
+            
+            name = cols[2].get_text(strip=True)
+            
+            singers.append(SingerRank(
+                rank=rank,
+                name=name,
+                avatar_url=avatar_url,
+                songs_url=songs_url
+            ))
+        
+        return singers
+    
     def extract_pagination(self, soup: BeautifulSoup, current_page: int = 1) -> Pagination:
         pagination_nav = soup.find("nav", {"aria-label": "Page navigation"})
         
@@ -221,6 +274,10 @@ class RankingCrawler:
             match = re.search(r"page=(\d+)", last_url)
             if match:
                 total_pages = int(match.group(1))
+            else:
+                match = re.search(r"/singer/(\d+)", last_url)
+                if match:
+                    total_pages = int(match.group(1))
         
         ranking_name, total_songs = self.extract_ranking_name(soup)
         
@@ -238,14 +295,25 @@ class RankingCrawler:
     
     def extract_all(self, soup: BeautifulSoup, current_page: int = 1) -> RankingPageData:
         ranking_name, total_songs = self.extract_ranking_name(soup)
-        songs = self.extract_songs(soup)
-        pagination = self.extract_pagination(soup, current_page)
         
-        return RankingPageData(
-            ranking_name=ranking_name,
-            songs=songs,
-            pagination=pagination
-        )
+        if "歌手" in ranking_name:
+            singers = self.extract_singers(soup)
+            pagination = self.extract_pagination(soup, current_page)
+            
+            return RankingPageData(
+                ranking_name=ranking_name,
+                singers=singers,
+                pagination=pagination
+            )
+        else:
+            songs = self.extract_songs(soup)
+            pagination = self.extract_pagination(soup, current_page)
+            
+            return RankingPageData(
+                ranking_name=ranking_name,
+                songs=songs,
+                pagination=pagination
+            )
     
     def save_to_json(self, data: RankingPageData, filepath: str):
         output_path = Path(filepath)
@@ -282,22 +350,40 @@ class RankingCrawler:
         ranking_name = self.RANKING_TYPES.get(ranking_type, ranking_type)
         output_file = output_path / f"{ranking_name}_page_{start_page}-{end_page}.json"
         
-        all_songs = []
-        for data in all_data:
-            all_songs.extend(data.songs)
-        
-        combined_data = {
-            "ranking_name": ranking_name,
-            "start_page": start_page,
-            "end_page": end_page,
-            "total_songs": len(all_songs),
-            "songs": [asdict(song) for song in all_songs]
-        }
-        
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(combined_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"已保存 {len(all_songs)} 首歌曲到: {output_file}")
+        if ranking_type == "singer":
+            all_singers = []
+            for data in all_data:
+                all_singers.extend(data.singers)
+            
+            combined_data = {
+                "ranking_name": ranking_name,
+                "start_page": start_page,
+                "end_page": end_page,
+                "total_singers": len(all_singers),
+                "singers": [asdict(singer) for singer in all_singers]
+            }
+            
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(combined_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"已保存 {len(all_singers)} 位歌手到: {output_file}")
+        else:
+            all_songs = []
+            for data in all_data:
+                all_songs.extend(data.songs)
+            
+            combined_data = {
+                "ranking_name": ranking_name,
+                "start_page": start_page,
+                "end_page": end_page,
+                "total_songs": len(all_songs),
+                "songs": [asdict(song) for song in all_songs]
+            }
+            
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(combined_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"已保存 {len(all_songs)} 首歌曲到: {output_file}")
         
         return all_data
 
@@ -325,13 +411,21 @@ def main():
         data = crawler.extract_all(soup, args.page)
         
         print(f"\n榜单: {data.ranking_name}")
-        print(f"歌曲数: {len(data.songs)}")
+        if data.singers:
+            print(f"歌手数: {len(data.singers)}")
+        else:
+            print(f"歌曲数: {len(data.songs)}")
         print(f"页码: {data.pagination.current_page}/{data.pagination.total_pages}")
-        print(f"总歌曲数: {data.pagination.total_songs}")
+        print(f"总数: {data.pagination.total_songs}")
         
-        print(f"\n前5首歌曲:")
-        for song in data.songs[:5]:
-            print(f"  {song.rank}. {song.title} - {song.artist} (ID: {song.song_id})")
+        if data.singers:
+            print(f"\n前5位歌手:")
+            for singer in data.singers[:5]:
+                print(f"  {singer.rank}. {singer.name}")
+        else:
+            print(f"\n前5首歌曲:")
+            for song in data.songs[:5]:
+                print(f"  {song.rank}. {song.title} - {song.artist} (ID: {song.song_id})")
         
         output_file = f"{args.output}/{data.ranking_name}_page_{args.page}.json"
         crawler.save_to_json(data, output_file)
@@ -344,8 +438,12 @@ def main():
             args.output
         )
         
-        total_songs = sum(len(data.songs) for data in all_data)
-        print(f"\n共爬取 {len(all_data)} 页，{total_songs} 首歌曲")
+        if args.ranking_type == "singer":
+            total_items = sum(len(data.singers) for data in all_data)
+            print(f"\n共爬取 {len(all_data)} 页，{total_items} 位歌手")
+        else:
+            total_items = sum(len(data.songs) for data in all_data)
+            print(f"\n共爬取 {len(all_data)} 页，{total_items} 首歌曲")
     
     else:
         print(f"正在爬取 {crawler.RANKING_TYPES.get(args.ranking_type, args.ranking_type)} 第 {args.page} 页...")
@@ -353,13 +451,21 @@ def main():
         data = crawler.extract_all(soup, args.page)
         
         print(f"\n榜单: {data.ranking_name}")
-        print(f"当前页歌曲数: {len(data.songs)}")
+        if data.singers:
+            print(f"当前页歌手数: {len(data.singers)}")
+        else:
+            print(f"当前页歌曲数: {len(data.songs)}")
         print(f"页码: {data.pagination.current_page}/{data.pagination.total_pages}")
-        print(f"总歌曲数: {data.pagination.total_songs}")
+        print(f"总数: {data.pagination.total_songs}")
         
-        print(f"\n前5首歌曲:")
-        for song in data.songs[:5]:
-            print(f"  {song.rank}. {song.title} - {song.artist} (ID: {song.song_id})")
+        if data.singers:
+            print(f"\n前5位歌手:")
+            for singer in data.singers[:5]:
+                print(f"  {singer.rank}. {singer.name}")
+        else:
+            print(f"\n前5首歌曲:")
+            for song in data.songs[:5]:
+                print(f"  {song.rank}. {song.title} - {song.artist} (ID: {song.song_id})")
         
         if data.pagination.has_next:
             print(f"\n下一页: {data.pagination.next_page_url}")
