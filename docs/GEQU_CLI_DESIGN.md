@@ -306,36 +306,16 @@ gequ stats history homepage --last 7d # 最近7天
 
 ```powershell
 # 搜索歌曲
-gequ search song "周杰伦"              # 按歌手搜索
-gequ search song "稻香"                # 按歌名搜索
-gequ search song "周杰伦 稻香"         # 组合搜索
+gequ search  "周杰伦"              # 按任何关键词搜索
 
-# 搜索歌手
-gequ search singer "周"                # 模糊搜索
-
-# 搜索关键词
-gequ search keyword "爱情"             # 搜索关键词记录
-
-# 高级搜索
-gequ search song --artist "周杰伦" --title "稻香"
-gequ search song --in-ranking new     # 在新歌榜中的歌曲
-gequ search singer --min-appearances 5 # 出现5次以上的歌手
 ```
 
-**选项**：
-- `--artist` - 歌手名
-- `--title` - 歌曲名
-- `--in-ranking` - 在指定榜单中
-- `--min-appearances` - 最小出现次数
-- `-n, --number` - 返回数量
-- `--format` - 输出格式
 
 #### 6. `gequ config` - 配置管理（新增）
 
 ```powershell
 # 显示配置
 gequ config show
-gequ config list
 
 # 设置配置
 gequ config set cookie "your_cookie_string"
@@ -345,7 +325,7 @@ gequ config set output-format json
 
 # 获取配置
 gequ config get cookie
-gequ config get db-path
+gequ config get db_path
 
 # 删除配置
 gequ config unset cookie
@@ -400,39 +380,7 @@ gequ
     └── reset      重置配置
 ```
 
-### 使用示例
 
-```powershell
-# 1. 爬取主页并保存到数据库
-gequ crawl homepage
-
-# 2. 爬取新歌榜前3页
-gequ crawl ranking new -s 1 -e 3
-
-# 3. 查看数据库统计
-gequ stats
-
-# 4. 下载歌曲
-gequ download 5863335
-
-# 5. 查询歌曲出现统计
-gequ stats song 5863335 --history
-
-# 6. 查看热门歌手
-gequ stats top-singers -n 20
-
-# 7. 搜索周杰伦的歌曲
-gequ search song "周杰伦"
-
-# 8. 设置Cookie
-gequ config set cookie "your_cookie_string"
-
-# 9. 备份数据库
-gequ db backup -o "backup_$(date +%Y%m%d).db"
-
-# 10. 导出歌手数据
-gequ db export singers -o "singers.csv" --format csv
-```
 
 ## 🔧 技术实现要点
 
