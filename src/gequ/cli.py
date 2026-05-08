@@ -703,6 +703,236 @@ def config_reset():
     console.print("[green]配置已重置[/green]")
 
 
+stats_app = typer.Typer(help="统计查询")
+app.add_typer(stats_app, name="stats")
+
+
+@stats_app.callback(invoke_without_command=True)
+def stats_overview(ctx: typer.Context):
+    """显示数据库统计总览"""
+    if ctx.invoked_subcommand is not None:
+        return
+    
+    from .database import Database
+    
+    db = Database(config.db_path)
+    stats = db.get_stats()
+    
+    table = Table(title="数据库统计")
+    table.add_column("类型", style="cyan")
+    table.add_column("数量", style="magenta")
+    
+    table.add_row("歌手数", str(stats['total_singers']))
+    table.add_row("歌曲数", str(stats['total_songs']))
+    table.add_row("排行记录数", str(stats['total_rankings']))
+    table.add_row("搜索关键词数", str(stats['total_keywords']))
+    table.add_row("下载记录数", str(stats['total_downloads']))
+    table.add_row("页面快照数", str(stats['total_page_snapshots']))
+    table.add_row("页面条目数", str(stats['total_page_items']))
+    
+    console.print(table)
+
+
+@stats_app.command("song")
+def stats_song(
+    song_id: int = typer.Argument(..., help="歌曲ID"),
+    history: bool = typer.Option(False, "--history", help="显示历史记录"),
+    limit: int = typer.Option(10, "-n", "--number", help="显示历史记录数量"),
+):
+    """歌曲统计"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    
+    song = db.get_song_by_id(song_id)
+    if not song:
+        console.print(f"[red]未找到歌曲: {song_id}[/red]")
+        raise typer.Exit(1)
+    
+    table = Table(title=f"歌曲: {song_id}")
+    table.add_column("字段", style="cyan")
+    table.add_column("值", style="magenta")
+    table.add_row("歌曲ID", str(song['song_id']))
+    table.add_row("标题", song['title'])
+    table.add_row("歌手", song['artist'])
+    table.add_row("封面", song.get('cover_url', '-') or '-')
+    table.add_row("创建时间", song.get('created_at', '-'))
+    console.print(table)
+    
+    stats = db.get_song_appearance_stats(song_id)
+    
+    console.print(f"\n[bold]出现统计:[/bold]")
+    console.print(f"  总次数: {stats['total_count']}")
+    console.print(f"  主页: {stats['homepage_count']}")
+    console.print(f"  排行榜: {stats['ranking_count']}")
+    
+    if history and stats['appearances']:
+        console.print(f"\n[bold]出现历史:[/bold]")
+        for app in stats['appearances'][:limit]:
+            page_type = app['page_type']
+            ranking_type = app.get('ranking_type') or '-'
+            search_keyword = app.get('search_keyword') or '-'
+            position = app['position']
+            crawled_at = app['crawled_at']
+            
+            if page_type == 'search':
+                console.print(f"  搜索 | 关键词:{search_keyword} | 排名{position} | {crawled_at}")
+            elif page_type == 'ranking':
+                console.print(f"  排行榜 | {ranking_type} | 排名{position} | {crawled_at}")
+            else:
+                console.print(f"  {page_type} | 排名{position} | {crawled_at}")
+
+
+@stats_app.command("singer")
+def stats_singer(
+    name: str = typer.Argument(..., help="歌手名称"),
+    history: bool = typer.Option(False, "--history", help="显示历史记录"),
+    limit: int = typer.Option(10, "-n", "--number", help="显示历史记录数量"),
+):
+    """歌手统计"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    
+    singer = db.get_singer_by_name(name)
+    if not singer:
+        console.print(f"[red]未找到歌手: {name}[/red]")
+        raise typer.Exit(1)
+    
+    table = Table(title=f"歌手: {name}")
+    table.add_column("字段", style="cyan")
+    table.add_column("值", style="magenta")
+    table.add_row("ID", str(singer['id']))
+    table.add_row("名称", singer['name'])
+    table.add_row("头像", singer.get('avatar_url', '-') or '-')
+    table.add_row("歌曲页", singer.get('songs_url', '-') or '-')
+    table.add_row("创建时间", singer.get('created_at', '-'))
+    console.print(table)
+    
+    stats = db.get_singer_appearance_stats(name)
+    
+    console.print(f"\n[bold]出现统计:[/bold]")
+    console.print(f"  总次数: {stats['total_count']}")
+    console.print(f"  主页: {stats['homepage_count']}")
+    console.print(f"  排行榜: {stats['ranking_count']}")
+    
+    if history and stats['appearances']:
+        console.print(f"\n[bold]出现历史:[/bold]")
+        for app in stats['appearances'][:limit]:
+            page_type = app['page_type']
+            ranking_type = app.get('ranking_type') or '-'
+            position = app['position']
+            crawled_at = app['crawled_at']
+            
+            if page_type == 'ranking':
+                console.print(f"  排行榜 | {ranking_type} | 排名{position} | {crawled_at}")
+            else:
+                console.print(f"  {page_type} | 排名{position} | {crawled_at}")
+
+
+@stats_app.command("top-songs")
+def stats_top_songs(
+    limit: int = typer.Option(10, "-n", "--number", help="显示数量"),
+):
+    """热门歌曲排行"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    songs = db.get_top_appearing_songs(limit)
+    
+    if songs:
+        table = Table(title=f"热门歌曲 TOP {len(songs)}")
+        table.add_column("排名", style="cyan")
+        table.add_column("歌曲", style="green")
+        table.add_column("歌手", style="magenta")
+        table.add_column("出现次数", style="yellow")
+        
+        for idx, song in enumerate(songs, 1):
+            table.add_row(str(idx), song['title'], song['artist'], str(song['appearance_count']))
+        
+        console.print(table)
+    else:
+        console.print("[yellow]暂无数据[/yellow]")
+
+
+@stats_app.command("top-singers")
+def stats_top_singers(
+    limit: int = typer.Option(10, "-n", "--number", help="显示数量"),
+):
+    """热门歌手排行"""
+    from .database import Database
+    
+    db = Database(config.db_path)
+    singers = db.get_top_appearing_singers(limit)
+    
+    if singers:
+        table = Table(title=f"热门歌手 TOP {len(singers)}")
+        table.add_column("排名", style="cyan")
+        table.add_column("歌手", style="magenta")
+        table.add_column("出现次数", style="yellow")
+        
+        for idx, singer in enumerate(singers, 1):
+            table.add_row(str(idx), singer['name'], str(singer['appearance_count']))
+        
+        console.print(table)
+    else:
+        console.print("[yellow]暂无数据[/yellow]")
+
+
+@stats_app.command("history")
+def stats_history(
+    page_type: str = typer.Argument(..., help="页面类型: homepage/ranking/search"),
+    ranking_type: Optional[str] = typer.Argument(None, help="榜单类型（可选）"),
+    limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+):
+    """页面快照历史"""
+    from .database import Database
+    from .models import PAGE_TYPES
+    
+    db = Database(config.db_path)
+    
+    if page_type not in PAGE_TYPES:
+        console.print(f"[red]无效的页面类型: {page_type}[/red]")
+        console.print(f"支持类型: {', '.join(PAGE_TYPES.keys())}")
+        raise typer.Exit(1)
+    
+    snapshots = db.get_page_snapshots(page_type=page_type, limit=limit)
+    
+    if not snapshots:
+        console.print(f"[yellow]暂无 {PAGE_TYPES.get(page_type, page_type)} 快照数据[/yellow]")
+        return
+    
+    table = Table(title=f"{PAGE_TYPES.get(page_type, page_type)} 快照历史 (共 {len(snapshots)} 条)")
+    table.add_column("ID", style="cyan")
+    table.add_column("时间", style="green")
+    
+    if page_type == "search":
+        table.add_column("关键词", style="magenta")
+        table.add_column("标题", style="yellow")
+    elif page_type == "ranking":
+        table.add_column("榜单", style="magenta")
+        table.add_column("页码", style="yellow")
+        table.add_column("标题", style="dim")
+    else:
+        table.add_column("标题", style="magenta")
+    
+    for snap in snapshots:
+        if page_type == "search":
+            keyword = snap.get('search_keyword') or '-'
+            title = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], keyword, title)
+        elif page_type == "ranking":
+            r_type = snap.get('ranking_type') or '-'
+            page_num = str(snap.get('page_number', 1))
+            title = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], r_type, page_num, title)
+        else:
+            title = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], title)
+    
+    console.print(table)
+
+
 @app.command()
 def search(
     keyword: str = typer.Argument(..., help="搜索关键词"),

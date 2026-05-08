@@ -568,10 +568,11 @@ rich>=13.0.0        # 美化输出
 - [x] 添加 `--no-db` 选项控制是否保存到数据库
 - [x] 添加 `-f/--file` 选项支持从本地HTML文件读取
 
-### 阶段4：统计查询功能
-- [ ] 实现 `gequ stats` 子命令完整功能
-- [ ] 支持 `gequ stats song` 和 `gequ stats singer`
-- [ ] 支持多种输出格式（table/json/csv）
+### 阶段4：统计查询功能 ✅
+- [x] 实现 `gequ stats` 子命令完整功能
+- [x] 支持 `gequ stats song` 和 `gequ stats singer`
+- [x] 支持 `gequ stats top-songs` 和 `gequ stats top-singers`
+- [x] 支持 `gequ stats history` 查看页面快照历史
 
 ### 阶段5：数据库增强功能
 - [ ] 实现 `gequ db export/import` 数据导入导出
@@ -621,4 +622,4 @@ rich>=13.0.0        # 美化输出
 ---
 
 **最后更新**: 2026-05-08
-**状态**: CLI工具已实现核心功能，使用httpx异步HTTP客户端，typer命令行框架。gequ search 已支持保存到数据库。
+**状态**: CLI工具已实现核心功能，使用httpx异步HTTP客户端，typer命令行框架。阶段3、阶段4已完成。
