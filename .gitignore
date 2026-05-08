@@ -19,6 +19,9 @@ Thumbs.db
 # Database
 *.db
 
+# output
+*.json
+
 # Downloads
 downloads/
 
