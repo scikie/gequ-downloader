@@ -426,22 +426,34 @@ class Database:
             count += 1
         return count
     
-    def get_page_snapshots(self, page_type: str = None, limit: int = 100) -> List[dict]:
+    def get_page_snapshots(self, page_type: str = None, limit: int = 100, date_from: str = None, date_to: str = None) -> List[dict]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            
+            conditions = []
+            params = []
+            
             if page_type:
-                cursor.execute("""
-                    SELECT * FROM page_snapshots 
-                    WHERE page_type = ?
-                    ORDER BY crawled_at DESC
-                    LIMIT ?
-                """, (page_type, limit))
-            else:
-                cursor.execute("""
-                    SELECT * FROM page_snapshots 
-                    ORDER BY crawled_at DESC
-                    LIMIT ?
-                """, (limit,))
+                conditions.append("page_type = ?")
+                params.append(page_type)
+            
+            if date_from:
+                conditions.append("crawled_at >= ?")
+                params.append(date_from)
+            
+            if date_to:
+                conditions.append("crawled_at <= ?")
+                params.append(date_to)
+            
+            query = "SELECT * FROM page_snapshots"
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " ORDER BY crawled_at DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
     
     def get_page_items_by_snapshot(self, snapshot_id: int) -> List[dict]:
@@ -561,30 +573,64 @@ class Database:
             
             return stats
     
-    def get_top_appearing_songs(self, limit: int = 10) -> List[dict]:
+    def get_top_appearing_songs(self, limit: int = 10, date_from: str = None, date_to: str = None) -> List[dict]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            
+            query = """
                 SELECT s.song_id, s.title, s.artist, COUNT(*) as appearance_count
                 FROM page_items pi
                 JOIN songs s ON pi.item_type = 'song' AND pi.item_id = s.id
-                GROUP BY s.song_id
-                ORDER BY appearance_count DESC
-                LIMIT ?
-            """, (limit,))
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+            """
+            params = []
+            conditions = []
+            
+            if date_from:
+                conditions.append("ps.crawled_at >= ?")
+                params.append(date_from)
+            
+            if date_to:
+                conditions.append("ps.crawled_at <= ?")
+                params.append(date_to)
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " GROUP BY s.song_id ORDER BY appearance_count DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
     
-    def get_top_appearing_singers(self, limit: int = 10) -> List[dict]:
+    def get_top_appearing_singers(self, limit: int = 10, date_from: str = None, date_to: str = None) -> List[dict]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            
+            query = """
                 SELECT sg.name, COUNT(*) as appearance_count
                 FROM page_items pi
                 JOIN singers sg ON pi.item_type = 'singer' AND pi.item_id = sg.id
-                GROUP BY sg.name
-                ORDER BY appearance_count DESC
-                LIMIT ?
-            """, (limit,))
+                JOIN page_snapshots ps ON pi.page_snapshot_id = ps.id
+            """
+            params = []
+            conditions = []
+            
+            if date_from:
+                conditions.append("ps.crawled_at >= ?")
+                params.append(date_from)
+            
+            if date_to:
+                conditions.append("ps.crawled_at <= ?")
+                params.append(date_to)
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " GROUP BY sg.name ORDER BY appearance_count DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
     
     def clear_rankings(self, ranking_type: str = None):

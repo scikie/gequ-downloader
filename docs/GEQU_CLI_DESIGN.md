@@ -197,14 +197,14 @@ gequ crawl ranking new -f "downloads/新歌榜.html"
 
 # 保存到数据库（默认行为）
 gequ crawl homepage
-gequ crawl ranking new --save-db      # 显式指定
+gequ crawl ranking new --no-db      # 显式指定不保存到数据库
 
-# 保存为JSON
+# 保存为JSON(默认同时保存到数据库)
 gequ crawl homepage -o "output.json"
 gequ crawl ranking new -o "ranking.json"
 
-# 同时保存到数据库和JSON
-gequ crawl homepage --save-db -o "homepage.json"
+# 不保存到数据库,仅仅保存为JSON
+gequ crawl ranking wwdj -o "ranking.json" --no-db
 ```
 
 **选项**：
@@ -213,41 +213,29 @@ gequ crawl homepage --save-db -o "homepage.json"
 - `-p, --page` - 指定页码
 - `-s, --start-page` - 起始页码
 - `-e, --end-page` - 结束页码
-- `--save-db` - 保存到数据库（默认行为）
 - `--no-db` - 不保存到数据库
 
 #### 2. `gequ download` - 下载歌曲
 
 ```powershell
 # 下载单首歌曲
-gequ download 5863335
+gequ download song 5863335
 
 # 下载多首歌曲
-gequ download 5863335 5863376 5863857
-
-# 从文件读取歌曲ID列表
-gequ download --from-file "song_ids.txt"
-
-# 使用Cookie（解决403问题）
-gequ download 5863335 --cookie "cookie_string"
+gequ download songs 5863335 5863376 5863857
 
 # 指定输出目录
-gequ download 5863335 -o "downloads"
+gequ download song 5863335 -o "downloads"
 
-# 只下载MP3（不嵌入封面）
-gequ download 5863335 --no-cover
 
-# 下载并保存记录到数据库
-gequ download 5863335 --save-db
+
+# 保存下载记录到数据库
+gequ download song 5863335 --no-db
 ```
 
 **选项**：
-- `--cookie, -c` - 浏览器Cookie字符串
 - `-o, --output` - 输出目录
-- `--from-file` - 从文件读取歌曲ID
-- `--no-cover` - 不下载封面
-- `--save-db` - 保存下载记录到数据库
-- `--skip-existing` - 跳过已存在的文件
+- `--no-db` - 保存下载记录到数据库
 
 #### 3. `gequ db` - 数据库操作
 
@@ -278,11 +266,6 @@ gequ db ranking singer    # 歌手榜
 所有命令支持 -n/--number 参数控制显示数量。                       # 优化数据库
 ```
 
-**选项**：
-- `-f, --file` - 文件路径
-- `-o, --output` - 输出路径
-- `--format` - 导出格式（json/csv）
-
 #### 4. `gequ stats` - 统计查询
 
 ```powershell
@@ -292,7 +275,6 @@ gequ stats
 # 歌曲统计
 gequ stats song 5863335               # 基本信息
 gequ stats song 5863335 --history     # 包含历史记录
-gequ stats song 5863335 --format json # JSON格式输出
 
 # 歌手统计
 gequ stats singer "周杰伦"
@@ -317,7 +299,6 @@ gequ stats history homepage --last 7d # 最近7天
 **选项**：
 - `-n, --number` - 显示数量
 - `--history` - 显示历史记录
-- `--format` - 输出格式（table/json/csv）
 - `--from, --to` - 时间范围
 - `--last` - 最近N天（如 7d, 30d）
 
@@ -573,6 +554,7 @@ rich>=13.0.0        # 美化输出
 - [x] 支持 `gequ stats song` 和 `gequ stats singer`
 - [x] 支持 `gequ stats top-songs` 和 `gequ stats top-singers`
 - [x] 支持 `gequ stats history` 查看页面快照历史
+- [x] 支持按时间范围查询（--from, --to, --last）
 
 ### 阶段5：数据库增强功能
 - [ ] 实现 `gequ db export/import` 数据导入导出

@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +12,51 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .config import GequConfig
 from .crawlers import HomepageCrawler, RankingCrawler, SearchCrawler, DownloadCrawler
+
+
+def parse_date(date_str: str) -> str:
+    """解析日期字符串，返回 YYYY-MM-DD HH:MM:SS 格式"""
+    date_str = date_str.strip()
+    
+    # 支持 YYYY-MM-DD HH:MM:SS 格式
+    if len(date_str) >= 19:
+        return date_str[:19]
+    
+    # 支持 YYYY-MM-DD 格式，补全时间
+    if len(date_str) == 10:
+        return f"{date_str} 00:00:00"
+    
+    # 支持 YYYYMMDD 格式
+    if len(date_str) == 8 and date_str.isdigit():
+        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} 00:00:00"
+    
+    return date_str
+
+
+def parse_last_period(last_str: str) -> tuple[str, str]:
+    """解析 --last 参数，返回 (date_from, date_to) 元组"""
+    match = re.match(r'^(\d+)([dDwWmM])$', last_str)
+    if not match:
+        raise ValueError(f"无效的时间范围格式: {last_str}，支持格式: 7d, 1w, 1m")
+    
+    num = int(match.group(1))
+    unit = match.group(2).lower()
+    
+    now = datetime.now()
+    
+    if unit == 'd':
+        delta = timedelta(days=num)
+    elif unit == 'w':
+        delta = timedelta(weeks=num)
+    elif unit == 'm':
+        delta = timedelta(days=num * 30)
+    else:
+        raise ValueError(f"不支持的时间单位: {unit}")
+    
+    date_from = (now - delta).strftime("%Y-%m-%d %H:%M:%S")
+    date_to = now.strftime("%Y-%m-%d %H:%M:%S")
+    
+    return date_from, date_to
 
 app = typer.Typer(
     name="gequ",
@@ -833,15 +880,44 @@ def stats_singer(
 @stats_app.command("top-songs")
 def stats_top_songs(
     limit: int = typer.Option(10, "-n", "--number", help="显示数量"),
+    date_from: Optional[str] = typer.Option(None, "--from", help="起始日期 (YYYY-MM-DD)"),
+    date_to: Optional[str] = typer.Option(None, "--to", help="结束日期 (YYYY-MM-DD)"),
+    last: Optional[str] = typer.Option(None, "--last", help="最近时间段 (如 7d, 1w, 1m)"),
 ):
     """热门歌曲排行"""
     from .database import Database
     
     db = Database(config.db_path)
-    songs = db.get_top_appearing_songs(limit)
+    
+    # 解析时间参数
+    if last:
+        try:
+            date_from, date_to = parse_last_period(last)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    elif date_from:
+        date_from = parse_date(date_from)
+    if date_to:
+        date_to = parse_date(date_to)
+    
+    songs = db.get_top_appearing_songs(limit, date_from, date_to)
     
     if songs:
-        table = Table(title=f"热门歌曲 TOP {len(songs)}")
+        title = f"热门歌曲 TOP {len(songs)}"
+        if date_from or date_to:
+            time_desc = ""
+            if last:
+                time_desc = f" (最近{last})"
+            elif date_from and date_to:
+                time_desc = f" ({date_from[:10]} ~ {date_to[:10]})"
+            elif date_from:
+                time_desc = f" (从 {date_from[:10]})"
+            elif date_to:
+                time_desc = f" (到 {date_to[:10]})"
+            title += time_desc
+        
+        table = Table(title=title)
         table.add_column("排名", style="cyan")
         table.add_column("歌曲", style="green")
         table.add_column("歌手", style="magenta")
@@ -858,15 +934,44 @@ def stats_top_songs(
 @stats_app.command("top-singers")
 def stats_top_singers(
     limit: int = typer.Option(10, "-n", "--number", help="显示数量"),
+    date_from: Optional[str] = typer.Option(None, "--from", help="起始日期 (YYYY-MM-DD)"),
+    date_to: Optional[str] = typer.Option(None, "--to", help="结束日期 (YYYY-MM-DD)"),
+    last: Optional[str] = typer.Option(None, "--last", help="最近时间段 (如 7d, 1w, 1m)"),
 ):
     """热门歌手排行"""
     from .database import Database
     
     db = Database(config.db_path)
-    singers = db.get_top_appearing_singers(limit)
+    
+    # 解析时间参数
+    if last:
+        try:
+            date_from, date_to = parse_last_period(last)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    elif date_from:
+        date_from = parse_date(date_from)
+    if date_to:
+        date_to = parse_date(date_to)
+    
+    singers = db.get_top_appearing_singers(limit, date_from, date_to)
     
     if singers:
-        table = Table(title=f"热门歌手 TOP {len(singers)}")
+        title = f"热门歌手 TOP {len(singers)}"
+        if date_from or date_to:
+            time_desc = ""
+            if last:
+                time_desc = f" (最近{last})"
+            elif date_from and date_to:
+                time_desc = f" ({date_from[:10]} ~ {date_to[:10]})"
+            elif date_from:
+                time_desc = f" (从 {date_from[:10]})"
+            elif date_to:
+                time_desc = f" (到 {date_to[:10]})"
+            title += time_desc
+        
+        table = Table(title=title)
         table.add_column("排名", style="cyan")
         table.add_column("歌手", style="magenta")
         table.add_column("出现次数", style="yellow")
@@ -884,6 +989,9 @@ def stats_history(
     page_type: str = typer.Argument(..., help="页面类型: homepage/ranking/search"),
     ranking_type: Optional[str] = typer.Argument(None, help="榜单类型（可选）"),
     limit: int = typer.Option(20, "-n", "--number", help="显示数量"),
+    date_from: Optional[str] = typer.Option(None, "--from", help="起始日期 (YYYY-MM-DD)"),
+    date_to: Optional[str] = typer.Option(None, "--to", help="结束日期 (YYYY-MM-DD)"),
+    last: Optional[str] = typer.Option(None, "--last", help="最近时间段 (如 7d, 1w, 1m)"),
 ):
     """页面快照历史"""
     from .database import Database
@@ -896,13 +1004,36 @@ def stats_history(
         console.print(f"支持类型: {', '.join(PAGE_TYPES.keys())}")
         raise typer.Exit(1)
     
-    snapshots = db.get_page_snapshots(page_type=page_type, limit=limit)
+    # 解析时间参数
+    if last:
+        try:
+            date_from, date_to = parse_last_period(last)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    elif date_from:
+        date_from = parse_date(date_from)
+    if date_to:
+        date_to = parse_date(date_to)
+    
+    snapshots = db.get_page_snapshots(page_type=page_type, limit=limit, date_from=date_from, date_to=date_to)
     
     if not snapshots:
-        console.print(f"[yellow]暂无 {PAGE_TYPES.get(page_type, page_type)} 快照数据[/yellow]")
+        time_hint = ""
+        if last:
+            time_hint = f" (最近{last})"
+        elif date_from or date_to:
+            time_hint = " (指定时间范围)"
+        console.print(f"[yellow]暂无 {PAGE_TYPES.get(page_type, page_type)} 快照数据{time_hint}[/yellow]")
         return
     
-    table = Table(title=f"{PAGE_TYPES.get(page_type, page_type)} 快照历史 (共 {len(snapshots)} 条)")
+    title = f"{PAGE_TYPES.get(page_type, page_type)} 快照历史 (共 {len(snapshots)} 条)"
+    if last:
+        title += f" (最近{last})"
+    elif date_from and date_to:
+        title += f" ({date_from[:10]} ~ {date_to[:10]})"
+    
+    table = Table(title=title)
     table.add_column("ID", style="cyan")
     table.add_column("时间", style="green")
     
@@ -919,16 +1050,16 @@ def stats_history(
     for snap in snapshots:
         if page_type == "search":
             keyword = snap.get('search_keyword') or '-'
-            title = snap.get('title') or '-'
-            table.add_row(str(snap['id']), snap['crawled_at'], keyword, title)
+            title_text = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], keyword, title_text)
         elif page_type == "ranking":
             r_type = snap.get('ranking_type') or '-'
             page_num = str(snap.get('page_number', 1))
-            title = snap.get('title') or '-'
-            table.add_row(str(snap['id']), snap['crawled_at'], r_type, page_num, title)
+            title_text = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], r_type, page_num, title_text)
         else:
-            title = snap.get('title') or '-'
-            table.add_row(str(snap['id']), snap['crawled_at'], title)
+            title_text = snap.get('title') or '-'
+            table.add_row(str(snap['id']), snap['crawled_at'], title_text)
     
     console.print(table)
 
