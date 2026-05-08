@@ -1,0 +1,27 @@
+[package]
+name = "gequ"
+version = "0.1.0"
+edition = "2021"
+description = "歌曲客网站爬虫工具"
+authors = ["Gequ Team"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+scraper = "0.19"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+tabled = "0.15"
+anyhow = "1"
+thiserror = "1"
+dirs = "5"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+indicatif = "0.17"
+colored = "2"
+
+[[bin]]
+name = "gequ"
+path = "src/main.rs"
