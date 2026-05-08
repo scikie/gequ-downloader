@@ -10,7 +10,7 @@ gequke-downloader/
 ├── database.py                  # 数据库管理（7个表）
 ├── homepage_crawler.py          # 主页爬虫
 ├── ranking_crawler.py           # 排行榜爬虫
-├── search_crawler.py            # 搜索爬虫 ⭐ 新增
+├── search_crawler.py            # 搜索爬虫
 ├── download_crawler.py          # 歌曲下载器
 ├── save_to_db.py                # 数据保存脚本（含统计查询）
 ├── gequke.db                    # SQLite数据库
@@ -18,7 +18,7 @@ gequke-downloader/
 │   ├── homepage.json
 │   ├── 新歌榜_page_1.json
 │   ├── 热门歌手排行_page_1.json
-│   └── 关键词-搜索结果.json      ⭐ 新增
+│   └── 关键词-搜索结果.json
 └── docs/
     ├── DATABASE_DESIGN.md       # 数据库设计文档
     ├── PAGE_SNAPSHOT_GUIDE.md   # 页面快照使用指南
@@ -116,7 +116,7 @@ uv run save_to_db.py --ranking new
 uv run save_to_db.py --ranking singer -s 1 -e 10
 uv run save_to_db.py --ranking new --ranking-file "downloads/新歌榜.html"
 
-# 保存搜索数据 ⭐ 新增
+# 保存搜索数据
 uv run save_to_db.py --search "清明上"
 uv run save_to_db.py --search-file "downloads/搜索结果.html"
 
@@ -563,18 +563,21 @@ rich>=13.0.0        # 美化输出
 
 ## 🎯 下一步任务
 
-### 阶段3：统计查询功能
+### 阶段3：gequ search 得到的数据保存到数据库SQLite ✅
+- [x] 实现 `gequ search` 除了爬取给定关键词歌曲后，将得到的信息保存到SQLite
+- [x] 添加 `--no-db` 选项控制是否保存到数据库
+- [x] 添加 `-f/--file` 选项支持从本地HTML文件读取
+
+### 阶段4：统计查询功能
 - [ ] 实现 `gequ stats` 子命令完整功能
 - [ ] 支持 `gequ stats song` 和 `gequ stats singer`
 - [ ] 支持多种输出格式（table/json/csv）
 
-### 阶段4：数据库增强功能
-- [ ] 实现 `gequ db save` 手动保存功能
-- [ ] 实现 `gequ db clear` 清除数据功能
+### 阶段5：数据库增强功能
 - [ ] 实现 `gequ db export/import` 数据导入导出
 - [ ] 实现 `gequ db backup/restore` 备份恢复功能
 
-### 阶段5：优化与完善
+### 阶段6：优化与完善
 - [ ] 添加命令补全功能
 - [ ] 添加详细的帮助文档
 - [ ] 编写单元测试
@@ -617,5 +620,5 @@ rich>=13.0.0        # 美化输出
 
 ---
 
-**最后更新**: 2026-05-07
-**状态**: CLI工具已实现核心功能，使用httpx异步HTTP客户端，typer命令行框架
+**最后更新**: 2026-05-08
+**状态**: CLI工具已实现核心功能，使用httpx异步HTTP客户端，typer命令行框架。gequ search 已支持保存到数据库。

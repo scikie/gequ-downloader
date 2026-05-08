@@ -235,11 +235,17 @@ class Database:
     def insert_download_record(self, record: DownloadRecord) -> int:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO downloads (song_id, file_path, file_size, downloaded_at)
-                VALUES (?, ?, ?, ?)
-            """, (record.song_id, record.file_path, record.file_size, 
-                  record.downloaded_at or "CURRENT_TIMESTAMP"))
+            
+            if record.downloaded_at:
+                cursor.execute("""
+                    INSERT INTO downloads (song_id, file_path, file_size, downloaded_at)
+                    VALUES (?, ?, ?, ?)
+                """, (record.song_id, record.file_path, record.file_size, record.downloaded_at))
+            else:
+                cursor.execute("""
+                    INSERT INTO downloads (song_id, file_path, file_size)
+                    VALUES (?, ?, ?)
+                """, (record.song_id, record.file_path, record.file_size))
             
             return cursor.lastrowid
     

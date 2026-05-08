@@ -707,6 +707,8 @@ def config_reset():
 def search(
     keyword: str = typer.Argument(..., help="搜索关键词"),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="输出JSON文件路径"),
+    no_db: bool = typer.Option(False, "--no-db", help="不保存到数据库"),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="从本地HTML文件读取"),
 ):
     """搜索歌曲"""
     crawler = SearchCrawler(
@@ -718,7 +720,12 @@ def search(
     console.print(f"正在搜索 '{keyword}'...")
     
     try:
-        soup = asyncio.run(crawler.search(keyword))
+        if file:
+            soup = crawler.search_from_file(file)
+            url = None
+        else:
+            soup = asyncio.run(crawler.search(keyword))
+            url = f"https://www.gequke.com/ss/{keyword}"
         data = crawler.extract_all(soup)
         console.print(f"[green]找到 {data.total_count} 条结果[/green]")
     except Exception as e:
@@ -737,9 +744,46 @@ def search(
         
         console.print(table)
     
+    if not no_db:
+        from .database import Database
+        from .models import Song, PageSnapshot, PageItem
+        
+        db = Database(config.db_path)
+        
+        snapshot = PageSnapshot(
+            page_type="search",
+            search_keyword=data.keyword,
+            url=url,
+            title=f"搜索: {data.keyword}"
+        )
+        snapshot_id = db.insert_page_snapshot(snapshot)
+        
+        page_items = []
+        song_count = 0
+        
+        for song in data.songs:
+            s = Song(
+                song_id=song.song_id,
+                title=song.title,
+                artist=song.artist
+            )
+            song_db_id = db.insert_song(s)
+            song_count += 1
+            
+            page_items.append(PageItem(
+                page_snapshot_id=snapshot_id,
+                item_type="song",
+                item_id=song_db_id,
+                position=song.position,
+                extra_data=json.dumps({"song_url": song.song_url})
+            ))
+        
+        db.insert_page_items(page_items)
+        console.print(f"\n[green]已保存到数据库: {song_count} 首歌曲[/green]")
+    
     if output:
         crawler.save_to_json(data, output)
-        console.print(f"\n[green]已保存到: {output}[/green]")
+        console.print(f"[green]已保存到: {output}[/green]")
 
 
 @app.command()
