@@ -1,0 +1,24 @@
+[project]
+name = "gequ"
+version = "0.1.0"
+description = "歌曲客网站爬虫 - 下载歌曲和歌词"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "mutagen>=1.47.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+gequ = "gequ.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gequ"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
