@@ -1,9 +1,9 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use regex::Regex;
-use std::path::{Path, PathBuf};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SongInfo {
@@ -43,14 +43,25 @@ pub struct DownloadCrawler {
 }
 
 impl DownloadCrawler {
-    pub fn new(output_dir: &str, cookie: Option<String>, user_agent: Option<String>, timeout: Option<f64>) -> Self {
+    pub fn new(
+        output_dir: &str,
+        cookie: Option<String>,
+        user_agent: Option<String>,
+        timeout: Option<f64>,
+    ) -> Self {
         let ua = user_agent.unwrap_or_else(|| "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36".to_string());
         let t = timeout.unwrap_or(30.0);
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("User-Agent", reqwest::header::HeaderValue::from_str(&ua).unwrap());
+        headers.insert(
+            "User-Agent",
+            reqwest::header::HeaderValue::from_str(&ua).unwrap(),
+        );
         headers.insert("Accept", reqwest::header::HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"));
-        headers.insert("Accept-Language", reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"));
+        headers.insert(
+            "Accept-Language",
+            reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"),
+        );
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs_f64(t))
@@ -77,9 +88,9 @@ impl DownloadCrawler {
 
     pub async fn get_song_page(&self, song_id: i64) -> Result<Html> {
         let url = format!("https://www.gequke.com/song/{}", song_id);
-        
+
         let mut request = self.client.get(&url);
-        
+
         if let Some(cookie) = self.get_cookies() {
             request = request.header("Cookie", cookie);
         }
@@ -147,19 +158,42 @@ impl DownloadCrawler {
         let api_url = "https://www.gequke.com/api/music";
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("Accept", reqwest::header::HeaderValue::from_static("application/json, text/javascript, */*; q=0.01"));
-        headers.insert("Content-Type", reqwest::header::HeaderValue::from_static("application/x-www-form-urlencoded; charset=UTF-8"));
-        headers.insert("X-Requested-With", reqwest::header::HeaderValue::from_static("XMLHttpRequest"));
-        headers.insert("X-Custom-Header", reqwest::header::HeaderValue::from_static("SecretKey"));
-        headers.insert("Origin", reqwest::header::HeaderValue::from_static("https://www.gequke.com"));
-        headers.insert("Referer", reqwest::header::HeaderValue::from_str(&format!("https://www.gequke.com/song/{}", song_id)).unwrap());
+        headers.insert(
+            "Accept",
+            reqwest::header::HeaderValue::from_static(
+                "application/json, text/javascript, */*; q=0.01",
+            ),
+        );
+        headers.insert(
+            "Content-Type",
+            reqwest::header::HeaderValue::from_static(
+                "application/x-www-form-urlencoded; charset=UTF-8",
+            ),
+        );
+        headers.insert(
+            "X-Requested-With",
+            reqwest::header::HeaderValue::from_static("XMLHttpRequest"),
+        );
+        headers.insert(
+            "X-Custom-Header",
+            reqwest::header::HeaderValue::from_static("SecretKey"),
+        );
+        headers.insert(
+            "Origin",
+            reqwest::header::HeaderValue::from_static("https://www.gequke.com"),
+        );
+        headers.insert(
+            "Referer",
+            reqwest::header::HeaderValue::from_str(&format!(
+                "https://www.gequke.com/song/{}",
+                song_id
+            ))
+            .unwrap(),
+        );
 
         let body = format!("id={}&type=0", play_id);
 
-        let mut request = self.client
-            .post(api_url)
-            .headers(headers)
-            .body(body);
+        let mut request = self.client.post(api_url).headers(headers).body(body);
 
         if let Some(cookie) = self.get_cookies() {
             request = request.header("Cookie", cookie);
@@ -174,7 +208,11 @@ impl DownloadCrawler {
         let json: serde_json::Value = resp.json().await.context("解析API响应失败")?;
         if let Some(code) = json.get("code") {
             if code.as_i64() == Some(200) {
-                if let Some(url) = json.get("data").and_then(|d| d.get("url")).and_then(|u| u.as_str()) {
+                if let Some(url) = json
+                    .get("data")
+                    .and_then(|d| d.get("url"))
+                    .and_then(|u| u.as_str())
+                {
                     return Ok(Some(url.to_string()));
                 }
             }
@@ -185,10 +223,17 @@ impl DownloadCrawler {
 
     pub async fn download_file(&self, url: &str, filepath: &Path) -> Result<String> {
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("Referer", reqwest::header::HeaderValue::from_static("https://www.gequke.com/"));
-        headers.insert("User-Agent", reqwest::header::HeaderValue::from_str(&self.user_agent).unwrap());
+        headers.insert(
+            "Referer",
+            reqwest::header::HeaderValue::from_static("https://www.gequke.com/"),
+        );
+        headers.insert(
+            "User-Agent",
+            reqwest::header::HeaderValue::from_str(&self.user_agent).unwrap(),
+        );
 
-        let resp = self.client
+        let resp = self
+            .client
             .get(url)
             .headers(headers)
             .send()
@@ -201,9 +246,13 @@ impl DownloadCrawler {
         let url_lower = url.to_lowercase();
         if url_lower.contains(".aac") && filepath.extension().map(|e| e != "aac").unwrap_or(false) {
             actual_path = filepath.with_extension("aac");
-        } else if url_lower.contains(".flac") && filepath.extension().map(|e| e != "flac").unwrap_or(false) {
+        } else if url_lower.contains(".flac")
+            && filepath.extension().map(|e| e != "flac").unwrap_or(false)
+        {
             actual_path = filepath.with_extension("flac");
-        } else if url_lower.contains(".m4a") && filepath.extension().map(|e| e != "m4a").unwrap_or(false) {
+        } else if url_lower.contains(".m4a")
+            && filepath.extension().map(|e| e != "m4a").unwrap_or(false)
+        {
             actual_path = filepath.with_extension("m4a");
         }
 
@@ -214,7 +263,8 @@ impl DownloadCrawler {
     }
 
     pub async fn download_cover(&self, cover_url: &str) -> Result<Vec<u8>> {
-        let resp = self.client
+        let resp = self
+            .client
             .get(cover_url)
             .send()
             .await
@@ -277,7 +327,10 @@ impl DownloadCrawler {
             }
         }
 
-        let mp3_url = match self.get_mp3_url(info.play_id.as_ref().unwrap(), song_id).await {
+        let mp3_url = match self
+            .get_mp3_url(info.play_id.as_ref().unwrap(), song_id)
+            .await
+        {
             Ok(Some(url)) => url,
             Ok(None) => {
                 let mut error_msg = "API 未返回音频链接".to_string();

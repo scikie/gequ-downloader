@@ -1,7 +1,7 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use regex::Regex;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,9 +33,15 @@ impl SearchCrawler {
         let t = timeout.unwrap_or(30.0);
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("User-Agent", reqwest::header::HeaderValue::from_str(&ua).unwrap());
+        headers.insert(
+            "User-Agent",
+            reqwest::header::HeaderValue::from_str(&ua).unwrap(),
+        );
         headers.insert("Accept", reqwest::header::HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"));
-        headers.insert("Accept-Language", reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"));
+        headers.insert(
+            "Accept-Language",
+            reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"),
+        );
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs_f64(t))
@@ -58,9 +64,9 @@ impl SearchCrawler {
 
     pub async fn search(&self, keyword: &str) -> Result<Html> {
         let url = format!("https://www.gequke.com/ss/{}", keyword);
-        
+
         let mut request = self.client.get(&url);
-        
+
         if let Some(cookie) = self.get_cookies() {
             request = request.header("Cookie", cookie);
         }
@@ -71,8 +77,8 @@ impl SearchCrawler {
     }
 
     pub fn search_from_file(filepath: &str) -> Result<Html> {
-        let content = std::fs::read_to_string(Path::new(filepath))
-            .context("读取本地HTML文件失败")?;
+        let content =
+            std::fs::read_to_string(Path::new(filepath)).context("读取本地HTML文件失败")?;
         Ok(Html::parse_document(&content))
     }
 
@@ -124,11 +130,16 @@ impl SearchCrawler {
                     let position: i32 = position_text.parse().unwrap_or(0);
 
                     let song_link = cols[1].select(&Selector::parse("a").unwrap()).next();
-                    let title = song_link.map(|l| l.text().collect::<String>().trim().to_string()).unwrap_or_default();
-                    let song_url = song_link.map(|l| l.value().attr("href").unwrap_or("").to_string()).unwrap_or_default();
+                    let title = song_link
+                        .map(|l| l.text().collect::<String>().trim().to_string())
+                        .unwrap_or_default();
+                    let song_url = song_link
+                        .map(|l| l.value().attr("href").unwrap_or("").to_string())
+                        .unwrap_or_default();
 
                     let song_id_re = Regex::new(r"/song/(\d+)").unwrap();
-                    let song_id: i64 = song_id_re.captures(&song_url)
+                    let song_id: i64 = song_id_re
+                        .captures(&song_url)
                         .and_then(|caps| caps[1].parse().ok())
                         .unwrap_or(0);
 
@@ -161,7 +172,7 @@ impl SearchCrawler {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).context("创建输出目录失败")?;
         }
-        
+
         let content = serde_json::to_string_pretty(data).context("序列化数据失败")?;
         std::fs::write(path, content).context("写入JSON文件失败")?;
         Ok(())

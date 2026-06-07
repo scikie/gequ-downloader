@@ -1,16 +1,16 @@
 //! 排行榜爬虫模块
-//! 
+//!
 //! 【职责】爬取各类排行榜（歌手榜、飙升榜、新歌榜等）
-//! 
+//!
 //! 【特殊处理】
 //! 歌手榜和其他榜单的页面结构不同：
 //! - 歌手榜显示歌手头像和名称
 //! - 其他榜单显示歌曲封面、标题、歌手
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -20,9 +20,9 @@ pub struct SongRank {
     pub rank: i32,
     pub title: String,
     pub artist: String,
-    pub song_id: i64,        // 歌曲唯一ID（从URL中提取）
-    pub cover_url: String,   // 封面图片URL
-    pub song_url: String,    // 歌曲详情页URL
+    pub song_id: i64,      // 歌曲唯一ID（从URL中提取）
+    pub cover_url: String, // 封面图片URL
+    pub song_url: String,  // 歌曲详情页URL
 }
 
 /// 歌手排行条目
@@ -30,12 +30,12 @@ pub struct SongRank {
 pub struct SingerRank {
     pub rank: i32,
     pub name: String,
-    pub avatar_url: String,  // 头像URL
-    pub songs_url: String,   // 歌手歌曲列表URL
+    pub avatar_url: String, // 头像URL
+    pub songs_url: String,  // 歌手歌曲列表URL
 }
 
 /// 分页信息
-/// 
+///
 /// 【设计模式：分页数据传输对象】
 /// 封装分页相关的所有元数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,15 +74,24 @@ pub struct RankingCrawler {
 impl RankingCrawler {
     /// 创建爬虫实例
     pub fn new(cookie: Option<String>, user_agent: Option<String>, timeout: Option<f64>) -> Self {
-        let ua = user_agent.unwrap_or_else(|| 
+        let ua = user_agent.unwrap_or_else(|| {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string()
-        );
+        });
         let t = timeout.unwrap_or(30.0);
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("User-Agent", reqwest::header::HeaderValue::from_str(&ua).unwrap());
-        headers.insert("Accept", reqwest::header::HeaderValue::from_static("text/html,*/*;q=0.8"));
-        headers.insert("Accept-Language", reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9"));
+        headers.insert(
+            "User-Agent",
+            reqwest::header::HeaderValue::from_str(&ua).unwrap(),
+        );
+        headers.insert(
+            "Accept",
+            reqwest::header::HeaderValue::from_static("text/html,*/*;q=0.8"),
+        );
+        headers.insert(
+            "Accept-Language",
+            reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9"),
+        );
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs_f64(t))
@@ -120,7 +129,7 @@ impl RankingCrawler {
     }
 
     /// 获取排行榜页面
-    /// 
+    ///
     /// 【知识点：URL构造逻辑】
     /// 不同榜单类型有不同的URL模式：
     /// - 歌手榜: /singer/ 或 /singer/{page}
@@ -148,7 +157,7 @@ impl RankingCrawler {
         };
 
         let mut request = self.client.get(&url);
-        
+
         if let Some(cookie) = self.get_cookies() {
             request = request.header("Cookie", cookie);
         }
@@ -160,17 +169,17 @@ impl RankingCrawler {
 
     /// 从本地文件加载
     pub fn get_ranking_page_from_file(filepath: &str) -> Result<Html> {
-        let content = std::fs::read_to_string(Path::new(filepath))
-            .context("读取本地HTML文件失败")?;
+        let content =
+            std::fs::read_to_string(Path::new(filepath)).context("读取本地HTML文件失败")?;
         Ok(Html::parse_document(&content))
     }
 
     /// 提取榜单名称和总条目数
-    /// 
+    ///
     /// 【知识点：正则表达式提取】
     /// 使用regex crate从文本中提取结构化数据
     /// r"(.+?)\s*\(共(\d+)条\)" 匹配：榜单名称（共XX条）
-    /// 
+    ///
     /// 返回元组：(名称, 总条目数)
     pub fn extract_ranking_name(&self, doc: &Html) -> (String, i32) {
         let selector = Selector::parse("h1.text-light").unwrap();
@@ -186,7 +195,7 @@ impl RankingCrawler {
     }
 
     /// 提取歌曲列表
-    /// 
+    ///
     /// 【知识点：表格解析】
     /// 页面使用表格布局，按行和列提取数据
     /// 注意：cols.len() < 4时跳过，处理可能的空行
@@ -204,7 +213,7 @@ impl RankingCrawler {
                     // 获取所有单元格
                     let cols: Vec<_> = row.select(&col_selector).collect();
                     if cols.len() < 4 {
-                        continue;  // 数据不完整，跳过
+                        continue; // 数据不完整，跳过
                     }
 
                     // 第1列：排名
@@ -213,20 +222,27 @@ impl RankingCrawler {
 
                     // 第2列：封面图片
                     let img = cols[1].select(&Selector::parse("img").unwrap()).next();
-                    let cover_url = img.map(|i| i.value().attr("src").unwrap_or("").to_string()).unwrap_or_default();
+                    let cover_url = img
+                        .map(|i| i.value().attr("src").unwrap_or("").to_string())
+                        .unwrap_or_default();
 
                     // 第3列：歌曲标题和链接
                     let song_link = cols[2].select(&Selector::parse("a").unwrap()).next();
-                    let title = song_link.map(|l| l.text().collect::<String>().trim().to_string()).unwrap_or_default();
-                    let song_url = song_link.map(|l| l.value().attr("href").unwrap_or("").to_string()).unwrap_or_default();
+                    let title = song_link
+                        .map(|l| l.text().collect::<String>().trim().to_string())
+                        .unwrap_or_default();
+                    let song_url = song_link
+                        .map(|l| l.value().attr("href").unwrap_or("").to_string())
+                        .unwrap_or_default();
 
                     // 【知识点：从URL提取ID】
                     // 歌曲URL格式：/song/{id}
                     // 使用正则提取数字部分
                     let song_id_re = Regex::new(r"/song/(\d+)").unwrap();
-                    let song_id: i64 = song_id_re.captures(&song_url)
-                        .and_then(|caps| caps[1].parse().ok())  // 尝试解析为数字
-                        .unwrap_or(0);  // 失败时默认0
+                    let song_id: i64 = song_id_re
+                        .captures(&song_url)
+                        .and_then(|caps| caps[1].parse().ok()) // 尝试解析为数字
+                        .unwrap_or(0); // 失败时默认0
 
                     // 第4列：歌手名
                     let artist = cols[3].text().collect::<String>().trim().to_string();
@@ -247,7 +263,7 @@ impl RankingCrawler {
     }
 
     /// 提取歌手列表
-    /// 
+    ///
     /// 【知识点：相似但不相同的解析逻辑】
     /// 与extract_songs结构类似，但提取不同字段
     /// 这种重复是合理的，避免过度抽象导致代码复杂
@@ -274,8 +290,12 @@ impl RankingCrawler {
                     let avatar_link = cols[1].select(&Selector::parse("a").unwrap()).next();
                     let img = cols[1].select(&Selector::parse("img").unwrap()).next();
 
-                    let avatar_url = img.map(|i| i.value().attr("src").unwrap_or("").to_string()).unwrap_or_default();
-                    let songs_url = avatar_link.map(|l| l.value().attr("href").unwrap_or("").to_string()).unwrap_or_default();
+                    let avatar_url = img
+                        .map(|i| i.value().attr("src").unwrap_or("").to_string())
+                        .unwrap_or_default();
+                    let songs_url = avatar_link
+                        .map(|l| l.value().attr("href").unwrap_or("").to_string())
+                        .unwrap_or_default();
 
                     // 第3列：歌手名称
                     let name = cols[2].text().collect::<String>().trim().to_string();
@@ -294,13 +314,13 @@ impl RankingCrawler {
     }
 
     /// 提取分页信息
-    /// 
+    ///
     /// 【知识点：复杂的HTML解析】
     /// 从分页导航栏提取：首页、上一页、下一页、尾页的URL
     /// 以及当前状态和总页数
     pub fn extract_pagination(&self, doc: &Html, current_page: i32) -> Pagination {
         let nav_selector = Selector::parse("nav[aria-label='Page navigation']").unwrap();
-        
+
         if let Some(nav) = doc.select(&nav_selector).next() {
             let item_selector = Selector::parse("li.page-item").unwrap();
             let link_selector = Selector::parse("a").unwrap();
@@ -318,9 +338,11 @@ impl RankingCrawler {
                 if let Some(link) = item.select(&link_selector).next() {
                     let text = link.text().collect::<String>().trim().to_string();
                     let href = link.value().attr("href").unwrap_or("").to_string();
-                    
+
                     // 检查是否禁用（通过class判断）
-                    let is_disabled = item.value().attr("class")
+                    let is_disabled = item
+                        .value()
+                        .attr("class")
                         .map(|c| c.contains("disabled"))
                         .unwrap_or(false);
 
@@ -379,7 +401,7 @@ impl RankingCrawler {
     }
 
     /// 提取所有数据
-    /// 
+    ///
     /// 【知识点：动态类型识别】
     /// 根据榜单名称判断是歌手榜还是歌曲榜
     /// 返回不同填充的数据结构
@@ -410,7 +432,7 @@ impl RankingCrawler {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).context("创建输出目录失败")?;
         }
-        
+
         let content = serde_json::to_string_pretty(data).context("序列化数据失败")?;
         std::fs::write(path, content).context("写入JSON文件失败")?;
         Ok(())

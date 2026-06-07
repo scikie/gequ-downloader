@@ -5,13 +5,15 @@
 - HotSinger - 热门歌手排行（排名、歌手名、链接）
 - HomepageData - 主页数据汇总
 使用方式：
+```bash
+cd playground
 # 从网站爬取
 uv run homepage_crawler.py
 # 从本地HTML测试
 uv run homepage_crawler.py -f "downloads/xxx.html"
 # 指定输出路径
 uv run homepage_crawler.py -o path/to/output.json
-已成功提取并保存到 downloads/homepage.json
+```
 """
 import json
 from dataclasses import dataclass, asdict

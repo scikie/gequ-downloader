@@ -1,19 +1,20 @@
 """
-支持的榜单类型（已更新）：
-- singer - 歌手榜 ⭐ 新增
+## 支持的榜单类型：
+- singer - 歌手榜 
 - surge - 飙升榜
 - new - 新歌榜
 - douyin - 抖音榜
 - jingdian - 怀旧榜
 - dianyin - 电音榜
 - wwdj - DJ榜
-使用示例：
+## 使用示例：
+```bash
+cd playground
 # 爬取歌手榜第1页
 uv run ranking_crawler.py singer -p 1
 # 爬取歌手榜第1-10页
 uv run ranking_crawler.py singer -s 1 -e 10
-# 爬取所有歌手（100页，1000位歌手）
-uv run ranking_crawler.py singer -s 1 -e 100
+```
 """
 
 import json

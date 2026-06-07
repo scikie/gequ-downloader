@@ -1,5 +1,9 @@
 """
 搜索爬虫 - 根据关键词搜索歌曲
+运行方式: 
+cd playground
+uv run search_crawler.py [关键词]
+
 """
 import json
 import re
@@ -152,7 +156,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="歌曲客搜索爬虫")
-    parser.add_argument("keyword", type=str, nargs="?", default="清明上", help="搜索关键词")
+    parser.add_argument("keyword", type=str, nargs="?", default="清明", help="搜索关键词")
     parser.add_argument("-c", "--cookies", type=str, help="浏览器Cookie字符串")
     parser.add_argument("-o", "--output", type=str, default="downloads", help="输出目录")
     parser.add_argument("-f", "--file", type=str, help="从本地HTML文件读取（用于测试）")

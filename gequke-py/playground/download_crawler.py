@@ -1,3 +1,14 @@
+"""
+功能：从歌曲详情页面下载歌曲
+使用方式：
+```bash
+cd playground
+# 下载歌曲ID为6746的MP3文件（https://www.gequke.com/song/6746）
+uv run download_clawler.py 6746
+
+```
+"""
+
 import re
 from pathlib import Path
 
